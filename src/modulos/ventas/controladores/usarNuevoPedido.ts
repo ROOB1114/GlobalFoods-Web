@@ -5,6 +5,7 @@ import {
   type ArticuloInventario,
 } from '@/modulos/almacen/servicios/servicioInventario'
 import { fechaHoyIso, formatearNumero } from '@/modulos/ventas/controladores/formatosPedido'
+import { METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
 import type { Cliente, SucursalCliente } from '@/modulos/ventas/interfaces/cliente'
 import type {
   DatosRegistroPedido,
@@ -147,6 +148,8 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
   const direccionEntrega = ref('')
   const referencias = ref('')
   const observaciones = ref('')
+  /** Pendiente hasta que la asesora elija otro. */
+  const metodoPago = ref<number>(METODO_PAGO.pendiente)
 
   /** Los errores (salvo el de disponibilidad) se muestran a partir del primer intento de registrar. */
   const intentoRegistrar = ref(false)
@@ -356,6 +359,7 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     direccionEntrega: direccionEntrega.value.trim(),
     referencias: referencias.value.trim(),
     observaciones: observaciones.value.trim(),
+    metodoPago: metodoPago.value,
     renglones: renglonesResumen.value,
     totalKg: totalKg.value,
     total: total.value,
@@ -369,7 +373,8 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
       fechaEntrega.value !== '' ||
       direccionEntrega.value.trim() !== '' ||
       referencias.value.trim() !== '' ||
-      observaciones.value.trim() !== '',
+      observaciones.value.trim() !== '' ||
+      metodoPago.value !== METODO_PAGO.pendiente,
   )
 
   // Registro
@@ -400,6 +405,7 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
       referencias: domicilio ? referencias.value.trim() : null,
       observaciones: observaciones.value.trim() || null,
       productos: renglones.value.map(aProductoRegistro),
+      metodoPago: metodoPago.value,
       // Los totales salen del resumen, para que coincidan con lo que vio la asesora.
       totalKg: totalKg.value,
       total: total.value,
@@ -439,6 +445,7 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     direccionEntrega.value = ''
     referencias.value = ''
     observaciones.value = ''
+    metodoPago.value = METODO_PAGO.pendiente
     intentoRegistrar.value = false
   }
 
@@ -458,6 +465,7 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     direccionEntrega,
     referencias,
     observaciones,
+    metodoPago,
     enviando,
     errores,
     erroresCantidad,

@@ -1,7 +1,6 @@
 import { obtenerToken } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { ESTATUS, estadoDePedido, sePuedeCancelar } from '@/modulos/ventas/controladores/estadosPedido'
 import { fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
-import { METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
 import { armarObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
 import type {
   DatosRegistroPedido,
@@ -24,7 +23,7 @@ interface PedidoAPI {
   TotalKG: number
   Total: number
   Estatus: number
-  /** 0 al crear: el método de pago se registra en el sistema interno al cobrar. */
+  /** El que eligió la asesora: 0 pendiente, 1 efectivo, 2 tarjeta o transferencia. */
   MetodoPago: number
   Observaciones: string
   lineas: LineaPedidoAPI[]
@@ -156,7 +155,7 @@ function aPedidoAPI(datos: DatosRegistroPedido): PedidoAPI {
     TotalKG: datos.totalKg,
     Total: datos.total,
     Estatus: ESTATUS.creado,
-    MetodoPago: METODO_PAGO.pendiente,
+    MetodoPago: datos.metodoPago,
     Observaciones: armarObservaciones(datos),
     lineas: datos.productos.map((producto) => ({
       CodigoProducto: producto.codigoProducto,

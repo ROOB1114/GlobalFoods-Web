@@ -15,6 +15,7 @@ import {
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
 import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarNuevoPedido'
+import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {
@@ -86,6 +87,10 @@ watch(
         <div class="confirmacion__dato">
           <dt><IconoVue nombre="calendario" :tamano="16" /> Fecha de entrega</dt>
           <dd>{{ formatearFecha(resumen.fechaEntrega) }}</dd>
+        </div>
+        <div class="confirmacion__dato">
+          <dt><IconoVue nombre="bolsa" :tamano="16" /> Método de pago</dt>
+          <dd>{{ textoMetodoPago(resumen.metodoPago) }}</dd>
         </div>
         <template v-if="resumen.modalidad === 'domicilio'">
           <div class="confirmacion__dato confirmacion__dato--largo">

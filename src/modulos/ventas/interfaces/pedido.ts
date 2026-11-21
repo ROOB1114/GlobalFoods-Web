@@ -62,6 +62,8 @@ export interface DatosRegistroPedido {
   /** null si no se capturaron. */
   observaciones: string | null
   productos: ProductoRegistroPedido[]
+  /** 0 pendiente, 1 efectivo, 2 tarjeta o transferencia (ver controladores/metodosPago.ts). */
+  metodoPago: number
   /** Totales del resumen. */
   totalKg: number
   total: number
@@ -121,6 +123,8 @@ export interface ResumenPedido {
   direccionEntrega: string
   referencias: string
   observaciones: string
+  /** Ver controladores/metodosPago.ts. */
+  metodoPago: number
   renglones: RenglonResumen[]
   totalKg: number
   total: number
