@@ -12,6 +12,7 @@ import {
   formatearNumero,
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
+import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {
@@ -62,6 +63,10 @@ const SIN_DATO = '—'
       <div class="resumen__dato">
         <dt>Fecha de entrega</dt>
         <dd>{{ formatearFecha(resumen.fechaEntrega) || SIN_DATO }}</dd>
+      </div>
+      <div class="resumen__dato">
+        <dt>Método de pago</dt>
+        <dd>{{ textoMetodoPago(resumen.metodoPago) }}</dd>
       </div>
     </dl>
 

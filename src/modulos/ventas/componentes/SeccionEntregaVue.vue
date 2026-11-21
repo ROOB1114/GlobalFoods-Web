@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// Paso 3 del pedido: modalidad, fecha y, si es a domicilio, dirección y referencias.
+// Paso 3 del pedido: modalidad, fecha y, si es a domicilio, dirección y referencias; método de
+// pago (Pendiente por defecto) y observaciones.
 
 import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import { MODALIDADES, fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
+import { OPCIONES_METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
 import { IDS_CAMPOS, MAXIMO_OBSERVACIONES } from '@/modulos/ventas/controladores/usarNuevoPedido'
 import type { ModalidadEntrega } from '@/modulos/ventas/interfaces/pedido'
 
@@ -27,11 +29,14 @@ const usarDireccionRegistrada = defineModel<boolean>('usarDireccionRegistrada', 
 const direccionEntrega = defineModel<string>('direccionEntrega', { required: true })
 const referencias = defineModel<string>('referencias', { required: true })
 const observaciones = defineModel<string>('observaciones', { required: true })
+/** 0 pendiente, 1 efectivo, 2 tarjeta o transferencia. */
+const metodoPago = defineModel<number>('metodoPago', { required: true })
 
 const opciones = (Object.keys(MODALIDADES) as ModalidadEntrega[]).map((valor) => ({ valor, ...MODALIDADES[valor] }))
 
 const ID_LEYENDA = 'pedido-modalidad-leyenda'
 const ID_CONTADOR = `${IDS_CAMPOS.observaciones}-contador`
+const ID_AYUDA_PAGO = 'pedido-metodo-pago-ayuda'
 const hoy = fechaHoyIso()
 </script>
 
@@ -139,6 +144,22 @@ const hoy = fechaHoyIso()
         />
       </div>
     </template>
+
+    <fieldset class="entrega__campo pago" :aria-describedby="ID_AYUDA_PAGO">
+      <legend class="entrega__etiqueta">Método de pago</legend>
+      <div class="pago__opciones">
+        <label
+          v-for="opcion in OPCIONES_METODO_PAGO"
+          :key="opcion.valor"
+          class="pago__opcion"
+          :class="{ 'pago__opcion--activa': metodoPago === opcion.valor }"
+        >
+          <input v-model="metodoPago" type="radio" name="metodo-pago" :value="opcion.valor" />
+          {{ opcion.etiqueta }}
+        </label>
+      </div>
+      <p :id="ID_AYUDA_PAGO" class="pago__ayuda">Déjalo en Pendiente si el cliente todavía no define cómo va a pagar.</p>
+    </fieldset>
 
     <div class="entrega__campo observaciones">
       <label class="entrega__etiqueta" :for="IDS_CAMPOS.observaciones">
@@ -302,6 +323,70 @@ const hoy = fechaHoyIso()
 
 .entrega__campo {
   margin-top: 16px;
+}
+
+.pago {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pago legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.pago__opciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pago__opcion {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--gf-borde);
+  border-radius: 999px;
+  background: var(--gf-superficie);
+  color: var(--gf-texto);
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.pago__opcion:hover {
+  border-color: var(--gf-claro);
+}
+
+.pago__opcion:focus-within {
+  outline: 2px solid var(--gf-secundario);
+  outline-offset: 2px;
+}
+
+.pago__opcion--activa {
+  border-color: var(--gf-secundario);
+  background: color-mix(in srgb, var(--gf-claro) 18%, var(--gf-superficie));
+  font-weight: 600;
+}
+
+.pago__opcion input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--gf-secundario);
+}
+
+.pago__ayuda {
+  margin: 0;
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
 }
 
 .observaciones {

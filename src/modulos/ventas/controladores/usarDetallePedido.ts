@@ -1,6 +1,7 @@
 import { computed, ref, shallowRef } from 'vue'
 
 import { estadoDePedido, type EstadoPantalla } from '@/modulos/ventas/controladores/estadosPedido'
+import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
 import { usarDirectorioPedidos } from '@/modulos/ventas/controladores/usarDirectorioPedidos'
 import type { LineaPedido, ModalidadEntrega, Pedido } from '@/modulos/ventas/interfaces/pedido'
@@ -31,6 +32,8 @@ export interface DetallePedido {
   referencias: string | null
   /** Lo que capturó la asesora (lo que queda después de leer el formato de Observaciones). */
   notas: string | null
+  /** "Pendiente", "Efectivo" o "Crédito o transferencia"; null si la API no lo trae. */
+  metodoPago: string | null
   lineas: LineaPedido[]
   totalKg: number
   total: number
@@ -47,10 +50,19 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
   const errorCarga = ref(false)
   const directorio = usarDirectorioPedidos()
 
-  async function cargar() {
-    cargando.value = true
-    noEncontrado.value = false
-    errorCarga.value = false
+  /**
+   * Pide el pedido a la API. Con `silencioso` (la actualización de cada minuto, o después de
+   * cancelar) se sigue viendo el pedido mientras llega la respuesta y, si falla, se queda como
+   * estaba. Si ya hay una carga visible en curso, la silenciosa no hace nada.
+   */
+  async function cargar(opcionesCarga: { silencioso?: boolean } = {}) {
+    const silencioso = opcionesCarga.silencioso === true
+    if (silencioso && cargando.value) return
+    if (!silencioso) {
+      cargando.value = true
+      noEncontrado.value = false
+      errorCarga.value = false
+    }
     try {
       const [pedido] = await Promise.all([obtenerPedidoPorId(id), directorio.cargarClientes()])
       await directorio.cargarSucursales([pedido.idCliente])
@@ -61,10 +73,11 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
         opciones.alVencerSesion()
         return
       }
+      if (silencioso) return
       if (motivo === 'no_encontrado') noEncontrado.value = true
       else errorCarga.value = true
     } finally {
-      cargando.value = false
+      if (!silencioso) cargando.value = false
     }
   }
 
@@ -90,6 +103,7 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
       fechaEntrega: entrega.fechaEntrega,
       referencias: entrega.referencias,
       notas: entrega.notas,
+      metodoPago: textoMetodoPago(actual.metodoPago),
       lineas: actual.lineas,
       totalKg: actual.totalKg,
       total: actual.total,

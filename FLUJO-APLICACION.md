@@ -68,7 +68,8 @@ La base actual del sistema tiene estas rutas principales:
 
 - `NuevoPedidoVista.vue` se divide en tres pasos y un resumen lateral que se queda fijo al desplazar. En pantallas de menos de 900 px, el resumen va debajo del formulario.
 - **Cliente**:
-  - Busca clientes activos por nombre mientras se escribe, a partir de 3 caracteres y con 300 ms de espera. La lista sale de `GET /api/clientes/activos`, se pide una vez y se filtra en el navegador. Si la API agrega el teléfono, también se busca por él.
+  - Al hacer clic en el buscador (o con la flecha abajo) se despliega la lista de todos los clientes activos, por nombre. Al escribir, la lista se reduce al instante desde la primera letra, sin importar acentos ni mayúsculas: primero los que empiezan con lo escrito y después los que lo contienen. La lista sale de `GET /api/clientes/activos`, se pide una vez y se filtra en el navegador. Si la API agrega el teléfono, también se busca por él.
+  - Enter elige la opción resaltada, o el cliente si solo queda uno.
   - La lista se recorre con flechas, Enter y Escape.
   - Al elegir el cliente se cargan sus sucursales activas. Si tiene una, se selecciona sola; si tiene varias, se elige en la lista; si no tiene, se avisa y no se puede registrar. La sucursal es obligatoria.
   - Los clientes nuevos no se dan de alta aquí.
@@ -80,9 +81,10 @@ La base actual del sistema tiene estas rutas principales:
   - Modalidad: Entrega a domicilio o Recolección en congeladora.
   - Fecha requerida, desde hoy.
   - A domicilio también pide dirección, que por defecto es la registrada de la sucursal elegida, y referencias.
+  - Método de pago: Pendiente (por defecto, si el cliente todavía no lo define), Efectivo o Tarjeta o transferencia. Sale en el resumen y en la confirmación.
   - Las observaciones son opcionales, de máximo 250 caracteres.
 - Al registrar se valida todo y el foco va al primer error. Si todo es válido, se confirma el resumen antes de enviar.
-- El registro usa `POST /api/pedidos`. La modalidad, la fecha de entrega y las referencias viajan dentro de `Observaciones`, porque la API no tiene campos para ellas. El folio es `#` y el `Id` del pedido creado.
+- El registro usa `POST /api/pedidos` y manda en `MetodoPago` el que se eligió (0 pendiente, 1 efectivo, 2 tarjeta o transferencia). La modalidad, la fecha de entrega y las referencias viajan dentro de `Observaciones`, porque la API no tiene campos para ellas. El folio es `#` y el `Id` del pedido creado.
 
 ```mermaid
 flowchart TD
@@ -107,11 +109,14 @@ flowchart TD
 ### 5. Pedidos (módulo de ventas)
 
 - **Lista** (`PedidosVista.vue`): todos los pedidos de `GET /api/pedidos`, del más reciente al más antiguo, en páginas de 10.
-  - Filtros por estado (Todos, Pendiente, Surtido, En reparto, Entregado), cada uno con su conteo según la búsqueda y las fechas.
+  - Filtros por estado (Todos, Pendiente, Surtido, En reparto, Entregado, Cancelado), cada uno con su conteo según la búsqueda y las fechas.
   - Búsqueda por folio o nombre del cliente, sin importar acentos ni mayúsculas, y rango Desde / Hasta sobre la fecha de registro.
-  - Entrega y modalidad salen de leer `Observaciones`; si el pedido no trae ese formato, se muestra "—".
+  - El buscador funciona como el de Nuevo pedido: al hacer clic se despliegan los clientes que tienen pedidos, con cuántos tiene cada uno, y al escribir la lista se reduce. Elegir un cliente deja solo sus pedidos; volver a escribir regresa a buscar por folio o nombre.
+  - Entrega y modalidad salen de leer `Observaciones`; también se entienden los pedidos de la app móvil (su bloque `[GlobalFoods:Entrega:v1]` con JSON). Si el pedido no trae ninguno de los dos formatos, se muestra "—".
 - **Detalle** (`DetallePedidoVista.vue`): barra de avance de los cuatro estados, cliente y entrega, y productos con su total. Si el folio no existe, se avisa con un enlace de regreso a la lista.
-- Solo consulta: no se cancelan ni se editan pedidos, porque la API todavía no tiene estado Cancelado ni historial de cambios.
+- Cancelar pedido: en el detalle, el administrativo ve "Cancelar pedido" mientras el pedido no se haya entregado (Creado, Surtido o En reparto, igual que en la app móvil). Solo pide confirmación y avisa si almacén ya surtió o si ya salió a reparto. Igual que la app, consulta el pedido y lo vuelve a mandar tal como está con `PUT /api/pedidos/:id` y Estatus 5. El pedido no se borra: queda Cancelado, con su propia píldora en los filtros y un aviso en el detalle en lugar de la barra de avance. Todavía no se pide el motivo (RF-PED-03), porque la API no tiene dónde guardarlo.
+- Surtido y Entregado no se cambian en la web: almacén marca Surtido en el sistema interno y, al cobrar ahí mismo, el pedido pasa a Entregado con su método de pago (Efectivo o Tarjeta o transferencia). La lista y el detalle se actualizan solos cada minuto, y al regresar a la pestaña, para reflejarlo. El detalle muestra el método de pago (Pendiente mientras no se cobra).
+- No se editan pedidos y todavía no hay historial de cambios, porque la API no lo guarda.
 - Si la API responde 401, se cierra la sesión y se pasa a inicio de sesión con "Su sesión expiró. Inicie sesión nuevamente."
 
 ```mermaid

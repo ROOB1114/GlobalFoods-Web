@@ -47,6 +47,22 @@ export async function actualizarClienteAPI(id: number, datos: Partial<ClienteAPI
   }
   return res.json()
 }
+/**
+ * Activa (1) o desactiva (0) un cliente. Los clientes no se borran: sus pedidos y sucursales
+ * los siguen usando, y uno inactivo ya no sale en GET /api/clientes/activos (Nuevo pedido).
+ * Manda los mismos datos que la edición (PUT /api/clientes/:id), cambiando solo el estatus.
+ */
+export async function cambiarEstatusClienteAPI(cliente: ClienteAPI, estatus: 0 | 1): Promise<ClienteAPI> {
+  return actualizarClienteAPI(cliente.Id, {
+    usuario: cliente.Usuario,
+    contrasena: cliente.Contrasena,
+    nombre: cliente.Nombre,
+    telefono: cliente.Telefono,
+    estatus,
+  } as unknown as Partial<ClienteAPI>)
+}
+
+/** Ya no se usa en la pantalla de Clientes: en lugar de borrar se desactiva (cambiarEstatusClienteAPI). */
 export async function eliminarClienteAPI(id: number): Promise<boolean> {
   const res = await fetch(`${URL_API.replace(/\/$/, '')}/api/clientes/${id}`, {
     method: 'DELETE',

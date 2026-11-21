@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import BotonVue from '@/componentes/BotonVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
@@ -10,7 +10,7 @@ import ModalNuevoCliente from '@/componentes/ModalNuevoCliente.vue'
 import ModalConfirmacion from '@/componentes/ModalConfirmacion.vue'
 import type { ItemNavegacion } from '@/componentes/BarraLateralVue.vue'
 import { obtenerNombreUsuario, obtenerMenuNavegacion } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
-import { obtenerClientesAPI, crearClienteAPI, actualizarClienteAPI, eliminarClienteAPI, type ClienteAPI } from '@/modulos/administracion/servicios/servicioClientes'
+import { obtenerClientesAPI, crearClienteAPI, actualizarClienteAPI, cambiarEstatusClienteAPI, type ClienteAPI } from '@/modulos/administracion/servicios/servicioClientes'
 
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
@@ -23,8 +23,11 @@ const errorCarga = ref('')
 // Estados de modales
 const mostrarModal = ref(false)
 const clienteSeleccionado = ref<ClienteAPI | null>(null)
+// Los clientes no se borran: se desactivan (y se pueden reactivar), porque sus pedidos y
+// sucursales los siguen usando.
 const mostrarModalConfirmacion = ref(false)
-const clienteAEliminar = ref<ClienteAPI | null>(null)
+const clienteACambiar = ref<ClienteAPI | null>(null)
+const desactivando = computed(() => clienteACambiar.value?.Estatus === 1)
 
 // Estado para controlar qué contraseñas están visibles (guardamos el Id)
 const contrasenasVisibles = ref<number[]>([])
@@ -74,8 +77,8 @@ const abrirModalEditar = (cli: ClienteAPI) => {
   mostrarModal.value = true
 }
 
-const solicitarEliminarCliente = (cli: ClienteAPI) => {
-  clienteAEliminar.value = cli
+const solicitarCambioEstatus = (cli: ClienteAPI) => {
+  clienteACambiar.value = cli
   mostrarModalConfirmacion.value = true
 }
 
@@ -86,7 +89,8 @@ const guardarCliente = async (datos: { nombre: string; celular: string; usuario:
       contrasena: datos.contrasena,
       nombre: datos.nombre,
       telefono: datos.celular, 
-      estatus: 1, 
+      // Al editar se conserva el estatus; antes se mandaba siempre 1 y reactivaba al cliente.
+      estatus: clienteSeleccionado.value?.Estatus ?? 1,
     }
 
     if (clienteSeleccionado.value) {
@@ -102,16 +106,16 @@ const guardarCliente = async (datos: { nombre: string; celular: string; usuario:
   }
 }
 
-const confirmarEliminacion = async () => {
-  if (!clienteAEliminar.value) return
+const confirmarCambioEstatus = async () => {
+  if (!clienteACambiar.value) return
 
   try {
-    await eliminarClienteAPI(clienteAEliminar.value.Id)
+    await cambiarEstatusClienteAPI(clienteACambiar.value, desactivando.value ? 0 : 1)
     mostrarModalConfirmacion.value = false
-    clienteAEliminar.value = null
+    clienteACambiar.value = null
     await cargarDatosClientes() 
   } catch (err: any) {
-    alert(err.message || 'Error al eliminar el cliente')
+    alert(err.message || 'No fue posible cambiar el estado del cliente. Intente nuevamente.')
   }
 }
 </script>
@@ -198,13 +202,25 @@ const confirmarEliminacion = async () => {
                 >
                   <IconoVue nombre="lapiz" :tamano="16" />
                 </button>
-                <button 
-                  type="button" 
-                  class="btn-accion btn-accion--eliminar" 
-                  aria-label="Eliminar cliente"
-                  @click.stop="solicitarEliminarCliente(cliente)"
+                <button
+                  v-if="cliente.Estatus === 1"
+                  type="button"
+                  class="btn-accion btn-accion--eliminar"
+                  aria-label="Desactivar cliente"
+                  title="Desactivar cliente"
+                  @click.stop="solicitarCambioEstatus(cliente)"
                 >
-                  <IconoVue nombre="basura" :tamano="16" />
+                  <IconoVue nombre="candado" :tamano="16" />
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="btn-accion btn-accion--editar"
+                  aria-label="Reactivar cliente"
+                  title="Reactivar cliente"
+                  @click.stop="solicitarCambioEstatus(cliente)"
+                >
+                  <IconoVue nombre="check" :tamano="16" />
                 </button>
               </div>
             </td>
@@ -223,11 +239,17 @@ const confirmarEliminacion = async () => {
 
   <ModalConfirmacion
     :mostrar="mostrarModalConfirmacion"
-    titulo="¿Eliminar cliente?"
-    :mensaje="`¿Estás seguro de que deseas eliminar al cliente '${clienteAEliminar?.Nombre}'?`"
-    texto-boton-confirmar="Eliminar"
+    :titulo="desactivando ? '¿Desactivar cliente?' : '¿Reactivar cliente?'"
+    :mensaje="
+      desactivando
+        ? `'${clienteACambiar?.Nombre}' ya no aparecerá al registrar pedidos. Sus pedidos y sucursales se conservan, y puedes reactivarlo cuando quieras.`
+        : `'${clienteACambiar?.Nombre}' volverá a aparecer al registrar pedidos.`
+    "
+    :texto-boton-confirmar="desactivando ? 'Desactivar' : 'Reactivar'"
+    :icono="desactivando ? 'candado' : 'check'"
+    :variante-confirmar="desactivando ? 'peligro' : 'primario'"
     @cerrar="mostrarModalConfirmacion = false"
-    @confirmar="confirmarEliminacion"
+    @confirmar="confirmarCambioEstatus"
   />
 </template>
 
