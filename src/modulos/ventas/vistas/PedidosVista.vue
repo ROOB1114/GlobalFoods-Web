@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // Pestaña Pedidos: todos los pedidos con filtros por estado, búsqueda, fechas y páginas de 10.
-// Solo consulta; cada folio abre su detalle. El estado y los filtros viven en usarListaPedidos().
+// Cada folio abre su detalle. El estado y los filtros viven en usarListaPedidos().
+// La lista se actualiza sola cada minuto para reflejar lo que cambia el sistema interno
+// (Surtido, cobro y Entregado).
 
-import { nextTick, onMounted, reactive } from 'vue'
+import { computed, nextTick, onMounted, reactive } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import BotonVue from '@/componentes/BotonVue.vue'
@@ -14,6 +16,7 @@ import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autentica
 import FiltrosPedidosVue from '@/modulos/ventas/componentes/FiltrosPedidosVue.vue'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
+import { usarActualizacionPeriodica } from '@/modulos/ventas/controladores/usarActualizacionPeriodica'
 import { IDS_LISTA, MENSAJES_LISTA, usarListaPedidos } from '@/modulos/ventas/controladores/usarListaPedidos'
 
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
@@ -35,6 +38,11 @@ const columnas: ColumnaTabla[] = [
 const SIN_DATO = '—'
 
 onMounted(lista.cargar)
+usarActualizacionPeriodica(() => lista.cargar({ silencioso: true }))
+
+const horaActualizacion = computed(() =>
+  lista.actualizadoA ? lista.actualizadoA.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '',
+)
 
 // "Limpiar filtros" se deshabilita al limpiar; el foco pasa a la búsqueda.
 async function alLimpiar() {
@@ -66,6 +74,9 @@ async function alCambiarPagina(paso: 1 | -1) {
         <div>
           <h1 class="pedidos__titulo">Pedidos</h1>
           <p class="pedidos__subtitulo">Consulta todos los pedidos y revisa en qué estado va cada uno.</p>
+          <p v-if="horaActualizacion" class="pedidos__actualizado">
+            Actualizado a las {{ horaActualizacion }} · se actualiza cada minuto
+          </p>
         </div>
 
         <div class="pedidos__accion">
@@ -201,6 +212,12 @@ async function alCambiarPagina(paso: 1 | -1) {
   color: var(--gf-texto);
   font-size: 24px;
   font-weight: 700;
+}
+
+.pedidos__actualizado {
+  margin-top: 4px;
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
 }
 
 .pedidos__subtitulo {

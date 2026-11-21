@@ -62,6 +62,8 @@ export function usarListaPedidos(opciones: { alVencerSesion: () => void }) {
   const pedidos = shallowRef<Pedido[]>([])
   const cargando = ref(true)
   const errorCarga = ref(false)
+  /** Hora de la última carga correcta; null mientras no hay ninguna. */
+  const actualizadoA = ref<Date | null>(null)
   const directorio = usarDirectorioPedidos()
   // Cada carga lleva un número; si llega la respuesta de una vieja (p. ej. doble Reintentar), se descarta.
   let cargaVigente = 0
@@ -177,16 +179,27 @@ export function usarListaPedidos(opciones: { alVencerSesion: () => void }) {
     pagina.value = 1
   })
 
-  async function cargar() {
+  /**
+   * Pide los pedidos a la API. Con `silencioso` (la actualización de cada minuto) no se muestra
+   * "Cargando…", se conservan la página y los filtros y, si falla, se quedan los datos que ya
+   * se veían. Si ya hay una carga visible en curso, la silenciosa no hace nada.
+   */
+  async function cargar(opcionesCarga: { silencioso?: boolean } = {}) {
+    const silencioso = opcionesCarga.silencioso === true
+    if (silencioso && cargando.value) return
     cargaVigente += 1
     const numero = cargaVigente
-    cargando.value = true
-    errorCarga.value = false
+    if (!silencioso) {
+      cargando.value = true
+      errorCarga.value = false
+    }
     try {
       const [lista] = await Promise.all([obtenerPedidos(), directorio.cargarClientes()])
       if (numero !== cargaVigente) return
       // Sin hora de registro, el Id desempata los del mismo día.
       pedidos.value = [...lista].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro) || b.id - a.id)
+      errorCarga.value = false
+      actualizadoA.value = new Date()
       // La primera página se muestra ya con los nombres de sus sucursales.
       await directorio.cargarSucursales(idsClientesPagina.value)
     } catch (error) {
@@ -195,9 +208,9 @@ export function usarListaPedidos(opciones: { alVencerSesion: () => void }) {
         opciones.alVencerSesion()
         return
       }
-      errorCarga.value = true
+      if (!silencioso) errorCarga.value = true
     } finally {
-      if (numero === cargaVigente) cargando.value = false
+      if (numero === cargaVigente && !silencioso) cargando.value = false
     }
   }
 
@@ -225,6 +238,7 @@ export function usarListaPedidos(opciones: { alVencerSesion: () => void }) {
   return {
     cargando,
     errorCarga,
+    actualizadoA,
     hayPedidos: computed(() => pedidos.value.length > 0),
     estatus,
     criterio,
