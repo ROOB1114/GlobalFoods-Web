@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import BotonVue from '@/componentes/BotonVue.vue'
-import IconoVue from '@/componentes/IconoVue.vue'
+import IconoVue, { type NombreIcono } from '@/componentes/IconoVue.vue'
 
 interface Props {
   mostrar: boolean
   titulo?: string
   mensaje?: string
   textoBotonConfirmar?: string
+  /** Icono de arriba; por defecto el bote de basura. */
+  icono?: NombreIcono
+  /** Estilo del botón de confirmar; por defecto rojo (peligro). */
+  varianteConfirmar?: 'primario' | 'peligro'
 }
 
 withDefaults(defineProps<Props>(), {
   titulo: '¿Eliminar registro?',
   mensaje: 'Esta acción no se puede deshacer. ¿Estás seguro de que deseas continuar?',
   textoBotonConfirmar: 'Eliminar',
+  icono: 'basura',
+  varianteConfirmar: 'peligro',
 })
 
 const emit = defineEmits<{
@@ -26,7 +32,7 @@ const emit = defineEmits<{
     <div v-if="mostrar" class="overlay" @click.self="emit('cerrar')">
       <div class="modal">
         <div class="modal__icono-wrap">
-          <IconoVue nombre="basura" :tamano="24" />
+          <IconoVue :nombre="icono" :tamano="24" />
         </div>
 
         <h3 class="modal__titulo">{{ titulo }}</h3>
@@ -36,7 +42,7 @@ const emit = defineEmits<{
           <BotonVue variante="secundario" @click="emit('cerrar')">
             Cancelar
           </BotonVue>
-          <BotonVue variante="peligro" @click="emit('confirmar')">
+          <BotonVue :variante="varianteConfirmar" @click="emit('confirmar')">
             {{ textoBotonConfirmar }}
           </BotonVue>
         </div>
