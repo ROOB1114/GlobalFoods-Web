@@ -1,12 +1,17 @@
 <script setup lang="ts">
-// Detalle de un pedido, solo consulta: avance, cliente y entrega, y productos.
-// No lleva "Cancelar pedido" ni la tarjeta "Historial del pedido" del diseño: la API todavía no
-// tiene estado Cancelado ni guarda los cambios de estado con su fecha y hora. Agregarlos cuando
-// el backend los tenga.
+// Detalle de un pedido: avance, cliente y entrega, y productos.
+// "Cancelar pedido" aparece para el administrativo mientras el pedido no se haya entregado
+// (Creado, Surtido o En reparto, igual que en la app móvil); el pedido no se borra, queda
+// Cancelado.
+// Todavía no lleva la tarjeta "Historial del pedido" del diseño: la API no guarda los cambios de
+// estado con su fecha y hora.
+// Se actualiza solo cada minuto para reflejar lo que cambia el sistema interno (Surtido, cobro y
+// Entregado con su método de pago), salvo mientras está abierta la ventana de cancelar.
 
-import { onMounted, reactive } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import AvisoVue from '@/componentes/AvisoVue.vue'
 import BotonVue from '@/componentes/BotonVue.vue'
 import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
@@ -15,13 +20,18 @@ import LayoutPanelVue from '@/componentes/LayoutPanelVue.vue'
 import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
 import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import AvancePedidoVue from '@/modulos/ventas/componentes/AvancePedidoVue.vue'
+import ModalCancelarPedidoVue from '@/modulos/ventas/componentes/ModalCancelarPedidoVue.vue'
+import { ESTATUS, sePuedeCancelar } from '@/modulos/ventas/controladores/estadosPedido'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
+import { perfilPuedeCancelar } from '@/modulos/ventas/controladores/permisosPedidos'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
+import { usarActualizacionPeriodica } from '@/modulos/ventas/controladores/usarActualizacionPeriodica'
 import {
   MENSAJES_DETALLE,
   mensajeNoEncontrado,
   usarDetallePedido,
 } from '@/modulos/ventas/controladores/usarDetallePedido'
+import { ErrorPedidos, cancelarPedido } from '@/modulos/ventas/servicios/servicioPedidos'
 
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
@@ -41,6 +51,77 @@ const columnasProductos: ColumnaTabla[] = [
 const SIN_DATO = '—'
 
 onMounted(consulta.cargar)
+
+// --- Cancelar pedido ---
+
+const MENSAJES_CANCELAR = {
+  exito: (folio: string) => `Pedido ${folio} cancelado.`,
+  sinConexion: 'El cambio no se guardó por falta de conexión. Intente nuevamente.',
+  error: 'No fue posible cancelar el pedido. Intente nuevamente.',
+}
+
+const folio = `#${id}`
+const ID_BOTON_CANCELAR = 'detalle-cancelar-pedido'
+
+const puedeCancelar = computed(
+  () => !!consulta.pedido && sePuedeCancelar(consulta.pedido.estado.estatus) && perfilPuedeCancelar(),
+)
+const cancelado = computed(() => consulta.pedido?.estado.estatus === ESTATUS.cancelado)
+/** Aviso de la ventana de cancelar según el estado; no bloquea. */
+const advertenciaCancelar = computed(() => {
+  const estatus = consulta.pedido?.estado.estatus
+  if (estatus === ESTATUS.surtido) return 'Almacén ya surtió este pedido.'
+  if (estatus === ESTATUS.enReparto) return 'Este pedido ya salió a reparto. Avise al repartidor.'
+  return ''
+})
+
+const mostrarCancelar = ref(false)
+const cancelando = ref(false)
+const mensajeAviso = ref('')
+const varianteAviso = ref<'error' | 'exito'>('error')
+
+usarActualizacionPeriodica(() => {
+  if (!mostrarCancelar.value && !cancelando.value) consulta.cargar({ silencioso: true })
+})
+
+/** Muestra el aviso; si el mismo texto ya estaba, se vuelve a anunciar. */
+async function avisar(texto: string, variante: 'error' | 'exito') {
+  mensajeAviso.value = ''
+  await nextTick()
+  varianteAviso.value = variante
+  mensajeAviso.value = texto
+}
+
+async function alConfirmarCancelacion() {
+  cancelando.value = true
+  try {
+    await cancelarPedido(id)
+    mostrarCancelar.value = false
+    avisar(MENSAJES_CANCELAR.exito(folio), 'exito')
+    await consulta.cargar({ silencioso: true })
+  } catch (error) {
+    const motivo = error instanceof ErrorPedidos ? error.motivo : null
+    if (motivo === 'sesion') {
+      salirPorSesionVencida(enrutador)
+      return
+    }
+    if (motivo === 'conexion') {
+      avisar(MENSAJES_CANCELAR.sinConexion, 'error')
+      return
+    }
+    // 400/409: la API no lo permitió (p. ej. el pedido ya cambió de estado). Se muestra su
+    // mensaje y se recarga el pedido para ver su estado actual.
+    if (motivo === 'datos_invalidos') {
+      mostrarCancelar.value = false
+      avisar((error as ErrorPedidos).mensajeApi || MENSAJES_CANCELAR.error, 'error')
+      await consulta.cargar({ silencioso: true })
+      return
+    }
+    avisar(MENSAJES_CANCELAR.error, 'error')
+  } finally {
+    cancelando.value = false
+  }
+}
 </script>
 
 <template>
@@ -67,6 +148,11 @@ onMounted(consulta.cargar)
         </RouterLink>
         <h1 class="detalle__titulo">Pedido #{{ id }}</h1>
         <ChipEstadoVue v-if="consulta.pedido" :estado="consulta.pedido.estado.chip" :etiqueta="consulta.pedido.estado.etiqueta" />
+        <div v-if="puedeCancelar" class="detalle__acciones">
+          <BotonVue :id="ID_BOTON_CANCELAR" variante="peligro" compacto @click="mostrarCancelar = true">
+            Cancelar pedido
+          </BotonVue>
+        </div>
       </div>
 
       <p v-if="consulta.pedido" class="detalle__subtitulo">
@@ -88,7 +174,11 @@ onMounted(consulta.cargar)
       </div>
 
       <template v-else-if="consulta.pedido">
-        <AvancePedidoVue :estatus="consulta.pedido.estado.estatus" />
+        <p v-if="cancelado" class="detalle__cancelado">
+          <IconoVue nombre="alerta" :tamano="18" />
+          Este pedido fue cancelado. Ya no aparece en las listas de almacén ni de reparto.
+        </p>
+        <AvancePedidoVue v-else :estatus="consulta.pedido.estado.estatus" />
 
         <section class="tarjeta">
           <EncabezadoSeccionVue titulo="Cliente y entrega" icono="clientes" />
@@ -130,6 +220,10 @@ onMounted(consulta.cargar)
                 <template v-else>{{ SIN_DATO }}</template>
               </dd>
             </div>
+            <div class="datos__dato">
+              <dt>Método de pago</dt>
+              <dd>{{ consulta.pedido.metodoPago ?? SIN_DATO }}</dd>
+            </div>
             <div class="datos__dato datos__dato--ancho">
               <dt>Referencias</dt>
               <dd>{{ consulta.pedido.referencias ?? SIN_DATO }}</dd>
@@ -165,6 +259,17 @@ onMounted(consulta.cargar)
       </template>
     </div>
   </LayoutPanelVue>
+
+  <ModalCancelarPedidoVue
+    :mostrar="mostrarCancelar"
+    :folio="folio"
+    :advertencia="advertenciaCancelar"
+    :enviando="cancelando"
+    @cerrar="mostrarCancelar = false"
+    @confirmar="alConfirmarCancelacion"
+  />
+
+  <AvisoVue v-model="mensajeAviso" :variante="varianteAviso" />
 </template>
 
 <style scoped>
@@ -255,6 +360,23 @@ onMounted(consulta.cargar)
   margin-top: -8px;
   color: var(--gf-texto-tenue);
   font-size: 14px;
+}
+
+.detalle__acciones {
+  margin-left: auto;
+}
+
+.detalle__cancelado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--gf-cancelado-punto);
+  border-radius: var(--gf-radio);
+  background: var(--gf-cancelado-bg);
+  color: var(--gf-cancelado-fg);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .detalle__mensaje {

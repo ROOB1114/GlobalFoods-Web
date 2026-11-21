@@ -83,6 +83,8 @@ export interface Pedido {
   total: number
   /** Ver controladores/estadosPedido.ts. */
   estatus: number
+  /** 0 pendiente, 1 efectivo, 2 crédito o transferencia (ver controladores/metodosPago.ts); null si la API no lo trae. */
+  metodoPago: number | null
   /** Texto tal como viene; leerObservaciones() separa los datos de entrega de las notas. */
   observaciones: string
   lineas: LineaPedido[]

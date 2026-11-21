@@ -102,7 +102,7 @@ GlobalFoods-Web/
 │  │     ├─ componentes/    # secciones y modales de Nuevo pedido; filtros y barra de avance de Pedidos
 │  │     ├─ controladores/  # usarNuevoPedido, usarListaPedidos, usarDetallePedido, estadosPedido, observacionesPedido…
 │  │     ├─ interfaces/     # cliente.ts, pedido.ts
-│  │     ├─ servicios/      # servicioClientesVentas.ts (clientes y sucursales), servicioPedidos.ts (registro y consulta)
+│  │     ├─ servicios/      # servicioClientesVentas.ts (clientes y sucursales), servicioPedidos.ts (registro, consulta y cancelación)
 │  │     └─ vistas/         # NuevoPedidoVista.vue, PedidosVista.vue, DetallePedidoVista.vue
 │  └─ pruebas/
 ```

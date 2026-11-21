@@ -1,6 +1,7 @@
 import { obtenerToken } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
-import { ESTATUS } from '@/modulos/ventas/controladores/estadosPedido'
+import { ESTATUS, estadoDePedido, sePuedeCancelar } from '@/modulos/ventas/controladores/estadosPedido'
 import { fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
+import { METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
 import { armarObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
 import type {
   DatosRegistroPedido,
@@ -23,6 +24,8 @@ interface PedidoAPI {
   TotalKG: number
   Total: number
   Estatus: number
+  /** 0 al crear: el método de pago se registra en el sistema interno al cobrar. */
+  MetodoPago: number
   Observaciones: string
   lineas: LineaPedidoAPI[]
 }
@@ -46,6 +49,8 @@ interface PedidoConsultadoAPI {
   TotalKG: number
   Total: number
   Estatus: number
+  /** Puede no venir si la API todavía no lo regresa. */
+  MetodoPago?: number | null
   Observaciones: string | null
   lineas?: LineaConsultadaAPI[]
 }
@@ -90,7 +95,11 @@ function mensajeDeError(datos: unknown): string {
  * "api" con cualquier otro error. Si la API manda `{ error }`, queda en `mensajeApi`.
  * `accion` completa los mensajes: "registrar el pedido", "consultar los pedidos".
  */
-async function solicitar(ruta: string, accion: string, envio?: { metodo: 'POST'; cuerpo: unknown }): Promise<unknown> {
+async function solicitar(
+  ruta: string,
+  accion: string,
+  envio?: { metodo: 'POST' | 'PUT'; cuerpo: unknown },
+): Promise<unknown> {
   const token = obtenerToken()
   if (!token) {
     throw new ErrorPedidos('sesion', 'La sesión no está activa. Inicia sesión nuevamente.')
@@ -127,7 +136,8 @@ async function solicitar(ruta: string, accion: string, envio?: { metodo: 'POST';
     throw new ErrorPedidos('no_encontrado', mensajeApi || 'No se encontró el pedido.', mensajeApi)
   }
 
-  if (respuestaHttp.status === 400) {
+  // 409: la API no permite el cambio, p. ej. el pedido ya cambió de estado.
+  if (respuestaHttp.status === 400 || respuestaHttp.status === 409) {
     throw new ErrorPedidos('datos_invalidos', mensajeApi || `No se pudo ${accion}.`, mensajeApi)
   }
 
@@ -146,6 +156,7 @@ function aPedidoAPI(datos: DatosRegistroPedido): PedidoAPI {
     TotalKG: datos.totalKg,
     Total: datos.total,
     Estatus: ESTATUS.creado,
+    MetodoPago: METODO_PAGO.pendiente,
     Observaciones: armarObservaciones(datos),
     lineas: datos.productos.map((producto) => ({
       CodigoProducto: producto.codigoProducto,
@@ -189,6 +200,7 @@ function aPedido(pedido: PedidoConsultadoAPI): Pedido {
     totalKg: aNumero(pedido.TotalKG),
     total: aNumero(pedido.Total),
     estatus: aNumero(pedido.Estatus),
+    metodoPago: pedido.MetodoPago === undefined || pedido.MetodoPago === null ? null : aNumero(pedido.MetodoPago),
     observaciones: pedido.Observaciones ?? '',
     lineas: (pedido.lineas ?? []).map(aLinea),
   }
@@ -214,6 +226,55 @@ export async function registrarPedido(datos: DatosRegistroPedido): Promise<Respu
   }
 
   return { folio: `#${creado.Id}` }
+}
+
+/**
+ * Cancela un pedido (baja lógica): lo vuelve a mandar tal como está, con Estatus 5. Es lo mismo
+ * que hace la app móvil; la API no tiene una ruta aparte para cancelar ni dónde guardar el motivo.
+ * Primero lo consulta, para reenviar sus datos actuales sin tocarlos (fecha, observaciones y
+ * líneas tal como vienen) y para no cancelar uno que ya se entregó o se canceló.
+ *
+ *   GET /api/pedidos/:id                → el pedido actual
+ *   PUT /api/pedidos/:id                → el mismo pedido con Estatus 5
+ *   Authorization: Bearer <token>
+ *
+ * Si ya no se puede cancelar, lanza ErrorPedidos "datos_invalidos" con el mensaje para la vista.
+ */
+export async function cancelarPedido(id: number): Promise<void> {
+  const ruta = `/api/pedidos/${encodeURIComponent(id)}`
+  const datos = await solicitar(ruta, 'consultar el pedido')
+  if (!datos || typeof datos !== 'object' || Array.isArray(datos)) {
+    throw new ErrorPedidos('api', 'La respuesta de la API no trae un pedido válido.')
+  }
+  const actual = datos as PedidoConsultadoAPI
+
+  const estatus = aNumero(actual.Estatus)
+  if (!sePuedeCancelar(estatus)) {
+    const mensaje = `El pedido no puede cancelarse porque se encuentra ${estadoDePedido(estatus).etiqueta}.`
+    throw new ErrorPedidos('datos_invalidos', mensaje, mensaje)
+  }
+
+  await solicitar(ruta, 'cancelar el pedido', {
+    metodo: 'PUT',
+    cuerpo: {
+      IdCliente: actual.IdCliente,
+      IdSucursal: actual.IdSucursal,
+      Fecha: actual.Fecha,
+      TotalKG: actual.TotalKG,
+      Total: actual.Total,
+      Estatus: ESTATUS.cancelado,
+      // Solo si la API ya lo regresa, para no cambiarlo.
+      ...(actual.MetodoPago === undefined || actual.MetodoPago === null ? {} : { MetodoPago: actual.MetodoPago }),
+      Observaciones: actual.Observaciones,
+      lineas: (actual.lineas ?? []).map((linea) => ({
+        CodigoProducto: linea.CodigoProducto,
+        Talla: linea.Talla,
+        Cantidad: linea.Cantidad,
+        Precio: linea.Precio,
+        Subtotal: linea.Subtotal,
+      })),
+    },
+  })
 }
 
 /**

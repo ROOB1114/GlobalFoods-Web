@@ -11,7 +11,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 
 import BotonVue from '@/componentes/BotonVue.vue'
 import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
-import { ESTADOS_PEDIDO } from '@/modulos/ventas/controladores/estadosPedido'
+import { ESTADOS_FILTRO } from '@/modulos/ventas/controladores/estadosPedido'
 import { filtrarClientes, indexarClientes } from '@/modulos/ventas/controladores/usarBuscadorClientes'
 import {
   IDS_LISTA,
@@ -156,7 +156,7 @@ function alPresionarTecla(evento: KeyboardEvent) {
         <span class="estados__conteo">{{ conteos.todos }}</span>
       </button>
       <button
-        v-for="estado in ESTADOS_PEDIDO"
+        v-for="estado in ESTADOS_FILTRO"
         :key="estado.estatus"
         type="button"
         class="estados__boton"
