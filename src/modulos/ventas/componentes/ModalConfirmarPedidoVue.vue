@@ -9,13 +9,13 @@ import IconoVue from '@/componentes/IconoVue.vue'
 import ModalVue from '@/componentes/ModalVue.vue'
 import {
   MODALIDADES,
-  formatearFecha,
   formatearMoneda,
   formatearNumero,
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
 import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarNuevoPedido'
 import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
+import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {
@@ -76,7 +76,7 @@ watch(
           <dt><IconoVue nombre="clientes" :tamano="16" /> Cliente</dt>
           <dd>{{ resumen.cliente }}</dd>
         </div>
-        <div class="confirmacion__dato">
+        <div v-if="resumen.modalidad !== 'recoleccion'" class="confirmacion__dato">
           <dt><IconoVue nombre="inicio" :tamano="16" /> Sucursal</dt>
           <dd>{{ resumen.sucursal }}</dd>
         </div>
@@ -84,9 +84,9 @@ watch(
           <dt><IconoVue :nombre="modalidad.icono" :tamano="16" /> Modalidad</dt>
           <dd>{{ modalidad.titulo }}</dd>
         </div>
-        <div class="confirmacion__dato">
-          <dt><IconoVue nombre="calendario" :tamano="16" /> Fecha de entrega</dt>
-          <dd>{{ formatearFecha(resumen.fechaEntrega) }}</dd>
+        <div v-if="resumen.modalidad === 'recoleccion'" class="confirmacion__dato confirmacion__dato--largo">
+          <dt>Punto de recolección</dt>
+          <dd>{{ PUNTO_RECOLECCION.nombre }}</dd>
         </div>
         <div class="confirmacion__dato">
           <dt><IconoVue nombre="bolsa" :tamano="16" /> Método de pago</dt>

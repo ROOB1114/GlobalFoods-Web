@@ -7,12 +7,12 @@ import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import {
   MODALIDADES,
-  formatearFecha,
   formatearMoneda,
   formatearNumero,
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
 import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
+import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {
@@ -52,17 +52,17 @@ const SIN_DATO = '—'
         <dt>Cliente</dt>
         <dd>{{ resumen.cliente ?? SIN_DATO }}</dd>
       </div>
-      <div class="resumen__dato">
+      <div v-if="resumen.modalidad === 'recoleccion'" class="resumen__dato">
+        <dt>Punto de recolección</dt>
+        <dd>{{ PUNTO_RECOLECCION.nombre }}</dd>
+      </div>
+      <div v-else class="resumen__dato">
         <dt>Sucursal</dt>
         <dd>{{ resumen.sucursal ?? SIN_DATO }}</dd>
       </div>
       <div class="resumen__dato">
         <dt>Modalidad</dt>
         <dd>{{ resumen.modalidad ? MODALIDADES[resumen.modalidad].titulo : SIN_DATO }}</dd>
-      </div>
-      <div class="resumen__dato">
-        <dt>Fecha de entrega</dt>
-        <dd>{{ formatearFecha(resumen.fechaEntrega) || SIN_DATO }}</dd>
       </div>
       <div class="resumen__dato">
         <dt>Método de pago</dt>

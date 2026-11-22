@@ -1,12 +1,14 @@
 <script setup lang="ts">
-// Paso 3 del pedido: modalidad, fecha y, si es a domicilio, dirección y referencias; método de
-// pago (Pendiente por defecto) y observaciones.
+// Paso 3 del pedido: modalidad y, si es a domicilio, dirección y referencias (en recolección, el
+// punto donde el cliente recoge); método de pago (Pendiente por defecto) y observaciones.
+// No se captura fecha de entrega: la registra el sistema interno al cobrar.
 
 import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
-import { MODALIDADES, fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
+import { MODALIDADES } from '@/modulos/ventas/controladores/formatosPedido'
 import { OPCIONES_METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
+import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { IDS_CAMPOS, MAXIMO_OBSERVACIONES } from '@/modulos/ventas/controladores/usarNuevoPedido'
 import type { ModalidadEntrega } from '@/modulos/ventas/interfaces/pedido'
 
@@ -15,7 +17,6 @@ interface Props {
   direccionSucursal: string | null
   errores: {
     modalidad: string
-    fecha: string
     direccion: string
     referencias: string
   }
@@ -24,7 +25,6 @@ interface Props {
 defineProps<Props>()
 
 const modalidad = defineModel<ModalidadEntrega | null>('modalidad', { required: true })
-const fechaEntrega = defineModel<string>('fechaEntrega', { required: true })
 const usarDireccionRegistrada = defineModel<boolean>('usarDireccionRegistrada', { required: true })
 const direccionEntrega = defineModel<string>('direccionEntrega', { required: true })
 const referencias = defineModel<string>('referencias', { required: true })
@@ -37,7 +37,6 @@ const opciones = (Object.keys(MODALIDADES) as ModalidadEntrega[]).map((valor) =>
 const ID_LEYENDA = 'pedido-modalidad-leyenda'
 const ID_CONTADOR = `${IDS_CAMPOS.observaciones}-contador`
 const ID_AYUDA_PAGO = 'pedido-metodo-pago-ayuda'
-const hoy = fechaHoyIso()
 </script>
 
 <template>
@@ -93,33 +92,33 @@ const hoy = fechaHoyIso()
       </p>
     </fieldset>
 
-    <div class="entrega__fila">
-      <CampoTextoVue
-        :id="IDS_CAMPOS.fecha"
-        v-model="fechaEntrega"
-        etiqueta="Fecha requerida de entrega"
-        tipo="date"
-        obligatorio
-        compacto
-        :min="hoy"
-        :error="errores.fecha"
-      />
-
-      <CampoTextoVue
-        v-if="modalidad === 'domicilio'"
-        :id="IDS_CAMPOS.direccion"
-        v-model="direccionEntrega"
-        etiqueta="Dirección de entrega"
-        marcador="Calle, número, colonia y ciudad"
-        obligatorio
-        compacto
-        autocomplete="off"
-        :readonly="usarDireccionRegistrada"
-        :error="errores.direccion"
-      />
+    <!-- Recolección: no lleva sucursal; el cliente pasa a este punto. -->
+    <div v-if="modalidad === 'recoleccion'" class="entrega__campo punto">
+      <p class="entrega__etiqueta">Punto de recolección</p>
+      <div class="punto__detalle">
+        <p class="punto__nombre">{{ PUNTO_RECOLECCION.nombre }}</p>
+        <a class="punto__enlace" :href="PUNTO_RECOLECCION.urlMaps" target="_blank" rel="noopener">
+          Ver en Maps<span class="visualmente-oculto"> (se abre en otra pestaña)</span>
+        </a>
+      </div>
     </div>
 
     <template v-if="modalidad === 'domicilio'">
+      <!-- CampoTextoVue pasa class al <input>; el margen va en un contenedor. -->
+      <div class="entrega__campo">
+        <CampoTextoVue
+          :id="IDS_CAMPOS.direccion"
+          v-model="direccionEntrega"
+          etiqueta="Dirección de entrega"
+          marcador="Calle, número, colonia y ciudad"
+          obligatorio
+          compacto
+          autocomplete="off"
+          :readonly="usarDireccionRegistrada"
+          :error="errores.direccion"
+        />
+      </div>
+
       <label class="entrega__casilla" :class="{ 'entrega__casilla--deshabilitada': !direccionSucursal }">
         <input
           v-model="usarDireccionRegistrada"
@@ -130,7 +129,6 @@ const hoy = fechaHoyIso()
         Usar la dirección registrada de la sucursal
       </label>
 
-      <!-- CampoTextoVue pasa class al <input>; el margen va en un contenedor. -->
       <div class="entrega__campo">
         <CampoTextoVue
           :id="IDS_CAMPOS.referencias"
@@ -292,11 +290,49 @@ const hoy = fechaHoyIso()
   line-height: 1.35;
 }
 
-.entrega__fila {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-  gap: 16px;
-  margin-top: 18px;
+.punto {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.punto :where(p) {
+  margin: 0;
+}
+
+.punto__detalle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gf-borde);
+  border-radius: 8px;
+  background: var(--gf-fondo);
+}
+
+.punto__nombre {
+  color: var(--gf-texto);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.punto__enlace {
+  color: var(--gf-secundario);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.punto__enlace:hover {
+  text-decoration: underline;
+}
+
+.punto__enlace:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--gf-secundario);
+  outline-offset: 2px;
 }
 
 .entrega__casilla {
@@ -440,8 +476,7 @@ const hoy = fechaHoyIso()
 }
 
 @media (max-width: 640px) {
-  .modalidad__opciones,
-  .entrega__fila {
+  .modalidad__opciones {
     grid-template-columns: minmax(0, 1fr);
   }
 }
