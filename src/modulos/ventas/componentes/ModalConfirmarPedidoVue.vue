@@ -14,7 +14,6 @@ import {
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
 import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarNuevoPedido'
-import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
@@ -87,10 +86,6 @@ watch(
         <div v-if="resumen.modalidad === 'recoleccion'" class="confirmacion__dato confirmacion__dato--largo">
           <dt>Punto de recolección</dt>
           <dd>{{ PUNTO_RECOLECCION.nombre }}</dd>
-        </div>
-        <div class="confirmacion__dato">
-          <dt><IconoVue nombre="bolsa" :tamano="16" /> Método de pago</dt>
-          <dd>{{ textoMetodoPago(resumen.metodoPago) }}</dd>
         </div>
         <template v-if="resumen.modalidad === 'domicilio'">
           <div class="confirmacion__dato confirmacion__dato--largo">

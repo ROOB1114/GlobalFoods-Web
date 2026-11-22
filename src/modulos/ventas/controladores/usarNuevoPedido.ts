@@ -5,7 +5,6 @@ import {
   type ArticuloInventario,
 } from '@/modulos/almacen/servicios/servicioInventario'
 import { formatearNumero } from '@/modulos/ventas/controladores/formatosPedido'
-import { METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
 import { ID_SUCURSAL_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { Cliente, SucursalCliente } from '@/modulos/ventas/interfaces/cliente'
 import type {
@@ -122,7 +121,8 @@ function cantidadValida(renglon: RenglonPedido): number | null {
  * Estado y reglas del formulario de Nuevo pedido: inventario, cliente y sucursal, renglones,
  * entrega, validaciones, totales y registro. La vista solo lo pinta y reacciona a sus resultados.
  * La sucursal solo se pide a domicilio; en recolección el pedido va con IdSucursal 0.
- * La fecha de entrega no se captura: la registra el sistema interno al cobrar.
+ * La fecha de entrega y el método de pago no se capturan: el pedido nace con método de pago
+ * pendiente y el sistema interno registra ambos al cobrar.
  * Si falla la consulta de sucursales, llama a `alFallarSucursales` para que la vista muestre el aviso.
  */
 export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
@@ -147,8 +147,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
   const direccionEntrega = ref('')
   const referencias = ref('')
   const observaciones = ref('')
-  /** Pendiente hasta que la asesora elija otro. */
-  const metodoPago = ref<number>(METODO_PAGO.pendiente)
 
   /** Los errores (salvo el de disponibilidad) se muestran a partir del primer intento de registrar. */
   const intentoRegistrar = ref(false)
@@ -352,7 +350,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     direccionEntrega: direccionEntrega.value.trim(),
     referencias: referencias.value.trim(),
     observaciones: observaciones.value.trim(),
-    metodoPago: metodoPago.value,
     renglones: renglonesResumen.value,
     totalKg: totalKg.value,
     total: total.value,
@@ -365,8 +362,7 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
       modalidad.value !== null ||
       direccionEntrega.value.trim() !== '' ||
       referencias.value.trim() !== '' ||
-      observaciones.value.trim() !== '' ||
-      metodoPago.value !== METODO_PAGO.pendiente,
+      observaciones.value.trim() !== '',
   )
 
   // Registro
@@ -397,7 +393,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
       referencias: domicilio ? referencias.value.trim() : null,
       observaciones: observaciones.value.trim() || null,
       productos: renglones.value.map(aProductoRegistro),
-      metodoPago: metodoPago.value,
       // Los totales salen del resumen, para que coincidan con lo que vio la asesora.
       totalKg: totalKg.value,
       total: total.value,
@@ -437,7 +432,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     direccionEntrega.value = ''
     referencias.value = ''
     observaciones.value = ''
-    metodoPago.value = METODO_PAGO.pendiente
     intentoRegistrar.value = false
   }
 
@@ -456,7 +450,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     direccionEntrega,
     referencias,
     observaciones,
-    metodoPago,
     enviando,
     errores,
     erroresCantidad,
