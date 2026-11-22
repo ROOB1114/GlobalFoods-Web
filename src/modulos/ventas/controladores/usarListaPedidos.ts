@@ -1,10 +1,12 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 
 import { estadoDePedido, type EstadoPantalla } from '@/modulos/ventas/controladores/estadosPedido'
-import { normalizarTexto } from '@/modulos/ventas/controladores/formatosPedido'
-import { leerObservaciones, type ObservacionesPedido } from '@/modulos/ventas/controladores/observacionesPedido'
+import { MODALIDADES, normalizarTexto } from '@/modulos/ventas/controladores/formatosPedido'
+import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
+import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+import { esSucursalRecoleccion, modalidadDePedido } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { usarDirectorioPedidos } from '@/modulos/ventas/controladores/usarDirectorioPedidos'
-import type { Pedido } from '@/modulos/ventas/interfaces/pedido'
+import type { ModalidadEntrega, Pedido } from '@/modulos/ventas/interfaces/pedido'
 import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
 
 export const PEDIDOS_POR_PAGINA = 10
@@ -43,11 +45,19 @@ export interface ClienteConPedidos {
 export interface FilaPedido {
   id: number
   cliente: string
-  /** "Sucursal Las Quintas"; "Sucursal #3" si no se encontró; "Sucursal …" mientras se consulta. */
+  /**
+   * "Sucursal Las Quintas"; "Sucursal #3" si no se encontró; "Sucursal …" mientras se consulta;
+   * "Recolección en congeladora" si es IdSucursal 0.
+   */
   sucursal: string
   /** aaaa-mm-dd */
   registrado: string
-  entrega: ObservacionesPedido
+  /** aaaa-mm-dd, de la API; null mientras el sistema interno no registra el pago. */
+  fechaEntrega: string | null
+  /** IdSucursal 0 es recolección; si no, la que diga Observaciones. */
+  modalidad: ModalidadEntrega | null
+  /** "Pendiente", "Efectivo" o "Tarjeta o transferencia"; null si la API no lo trae. */
+  metodoPago: string | null
   estado: EstadoPantalla
   total: number
   totalKg: number
@@ -79,7 +89,7 @@ export function usarListaPedidos(opciones: { alVencerSesion: () => void }) {
   const hasta = ref('')
   const pagina = ref(1)
 
-  /** Con nombre de cliente, estado y datos de entrega; del más reciente al más antiguo. */
+  /** Con nombre de cliente, estado y modalidad; del más reciente al más antiguo. */
   const pedidosResueltos = computed(() =>
     pedidos.value.map((pedido) => {
       const cliente = directorio.nombreCliente(pedido.idCliente)
@@ -88,7 +98,7 @@ export function usarListaPedidos(opciones: { alVencerSesion: () => void }) {
         cliente,
         clienteNormalizado: normalizarTexto(cliente),
         estado: estadoDePedido(pedido.estatus),
-        entrega: leerObservaciones(pedido.observaciones),
+        modalidad: modalidadDePedido(pedido.idSucursal, leerObservaciones(pedido.observaciones).modalidad),
       }
     }),
   )
@@ -150,21 +160,29 @@ export function usarListaPedidos(opciones: { alVencerSesion: () => void }) {
     filtrados.value.slice((paginaActual.value - 1) * PEDIDOS_POR_PAGINA, paginaActual.value * PEDIDOS_POR_PAGINA),
   )
 
-  const idsClientesPagina = computed(() => enPagina.value.map(({ pedido }) => pedido.idCliente))
+  // Los de recolección (IdSucursal 0) no tienen sucursal que buscar.
+  const idsClientesPagina = computed(() =>
+    enPagina.value
+      .filter(({ pedido }) => !esSucursalRecoleccion(pedido.idSucursal))
+      .map(({ pedido }) => pedido.idCliente),
+  )
 
   function textoSucursal(pedido: Pedido): string {
+    if (esSucursalRecoleccion(pedido.idSucursal)) return MODALIDADES.recoleccion.titulo
     const sucursal = directorio.buscarSucursal(pedido.idCliente, pedido.idSucursal)
     if (sucursal === undefined) return 'Sucursal …'
     return sucursal ? `Sucursal ${sucursal.nombre}` : `Sucursal #${pedido.idSucursal}`
   }
 
   const filasPagina = computed<FilaPedido[]>(() =>
-    enPagina.value.map(({ pedido, cliente, estado, entrega }) => ({
+    enPagina.value.map(({ pedido, cliente, estado, modalidad }) => ({
       id: pedido.id,
       cliente,
       sucursal: textoSucursal(pedido),
       registrado: pedido.fechaRegistro,
-      entrega,
+      fechaEntrega: pedido.fechaEntrega,
+      modalidad,
+      metodoPago: textoMetodoPago(pedido.metodoPago),
       estado,
       total: pedido.total,
       totalKg: pedido.totalKg,

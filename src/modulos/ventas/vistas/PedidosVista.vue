@@ -32,6 +32,7 @@ const columnas: ColumnaTabla[] = [
   { clave: 'entrega', etiqueta: 'Entrega' },
   { clave: 'modalidad', etiqueta: 'Modalidad' },
   { clave: 'estado', etiqueta: 'Estado' },
+  { clave: 'metodoPago', etiqueta: 'Método de pago' },
   { clave: 'total', etiqueta: 'Total', alineacion: 'derecha' },
 ]
 
@@ -136,15 +137,16 @@ async function alCambiarPagina(paso: 1 | -1) {
               <p class="pedidos__detalle">{{ fila.sucursal }}</p>
             </td>
             <td>{{ formatearFecha(fila.registrado) || SIN_DATO }}</td>
-            <td>{{ fila.entrega.fechaEntrega ? formatearFecha(fila.entrega.fechaEntrega) : SIN_DATO }}</td>
+            <td>{{ fila.fechaEntrega ? formatearFecha(fila.fechaEntrega) : SIN_DATO }}</td>
             <td>
-              <span v-if="fila.entrega.modalidad" class="pedidos__modalidad">
-                <IconoVue :nombre="MODALIDADES[fila.entrega.modalidad].icono" :tamano="16" />
-                {{ MODALIDADES[fila.entrega.modalidad].etiquetaCorta }}
+              <span v-if="fila.modalidad" class="pedidos__modalidad">
+                <IconoVue :nombre="MODALIDADES[fila.modalidad].icono" :tamano="16" />
+                {{ MODALIDADES[fila.modalidad].etiquetaCorta }}
               </span>
               <template v-else>{{ SIN_DATO }}</template>
             </td>
             <td><ChipEstadoVue :estado="fila.estado.chip" :etiqueta="fila.estado.etiqueta" /></td>
+            <td>{{ fila.metodoPago ?? SIN_DATO }}</td>
             <td class="tabla__celda--derecha">
               <p class="pedidos__total">{{ formatearMoneda(fila.total) }}</p>
               <p class="pedidos__detalle">{{ formatearKg(fila.totalKg) }}</p>

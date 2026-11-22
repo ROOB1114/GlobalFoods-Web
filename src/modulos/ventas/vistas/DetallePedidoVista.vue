@@ -5,8 +5,9 @@
 // Cancelado.
 // Todavía no lleva la tarjeta "Historial del pedido" del diseño: la API no guarda los cambios de
 // estado con su fecha y hora.
-// Se actualiza solo cada minuto para reflejar lo que cambia el sistema interno (Surtido, cobro y
-// Entregado con su método de pago), salvo mientras está abierta la ventana de cancelar.
+// Se actualiza solo cada minuto para reflejar lo que cambia el sistema interno (Surtido, cobro con
+// su método de pago y fecha de entrega, y Entregado), salvo mientras está abierta la ventana de
+// cancelar.
 
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
@@ -24,6 +25,7 @@ import ModalCancelarPedidoVue from '@/modulos/ventas/componentes/ModalCancelarPe
 import { ESTATUS, sePuedeCancelar } from '@/modulos/ventas/controladores/estadosPedido'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
 import { perfilPuedeCancelar } from '@/modulos/ventas/controladores/permisosPedidos'
+import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
 import { usarActualizacionPeriodica } from '@/modulos/ventas/controladores/usarActualizacionPeriodica'
 import {
@@ -192,7 +194,16 @@ async function alConfirmarCancelacion() {
               <dt>Sucursal</dt>
               <dd>{{ consulta.pedido.sucursal }}</dd>
             </div>
-            <div class="datos__dato">
+            <div v-if="consulta.pedido.modalidad === 'recoleccion'" class="datos__dato">
+              <dt>Punto de recolección</dt>
+              <dd>
+                {{ PUNTO_RECOLECCION.nombre }}
+                <a class="detalle__enlace datos__mapa" :href="PUNTO_RECOLECCION.urlMaps" target="_blank" rel="noopener">
+                  Ver en Maps<span class="visualmente-oculto"> (se abre en otra pestaña)</span>
+                </a>
+              </dd>
+            </div>
+            <div v-else class="datos__dato">
               <dt>Dirección de entrega</dt>
               <dd>{{ consulta.pedido.direccionEntrega ?? SIN_DATO }}</dd>
             </div>
@@ -211,7 +222,7 @@ async function alConfirmarCancelacion() {
               </dd>
             </div>
             <div class="datos__dato">
-              <dt>Fecha requerida</dt>
+              <dt>Fecha de entrega</dt>
               <dd>
                 <span v-if="consulta.pedido.fechaEntrega" class="datos__icono">
                   <IconoVue nombre="calendario" :tamano="16" />
@@ -442,6 +453,19 @@ async function alConfirmarCancelacion() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.datos__mapa {
+  display: block;
+  width: fit-content;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.datos__mapa:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--gf-secundario);
+  outline-offset: 2px;
 }
 
 .datos .datos__notas {
