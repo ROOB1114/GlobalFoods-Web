@@ -42,7 +42,7 @@ La base actual del sistema tiene estas rutas principales:
 - `/usuarios` → vista de administración de usuarios
 - `/pedidos` → lista de todos los pedidos (desde "Pedidos" en el menú lateral)
 - `/pedidos/nuevo` → captura y registro de un pedido (desde el botón "Nuevo Pedido" del panel o de la lista de pedidos)
-- `/pedidos/:id` → detalle de un pedido (desde el folio en la lista)
+- `/pedidos/:id` → detalle de un pedido (desde su fila o su folio en la lista)
 
 ## Lógica funcional por pantalla
 
@@ -111,6 +111,7 @@ flowchart TD
 ### 5. Pedidos (módulo de ventas)
 
 - **Lista** (`PedidosVista.vue`): todos los pedidos de `GET /api/pedidos`, del más reciente al más antiguo, en páginas de 10.
+  - Un clic en cualquier parte de la fila abre el detalle; con Ctrl/Cmd + clic, en otra pestaña. Si se está seleccionando texto de la fila, no navega. El folio sigue siendo un enlace, para llegar con el teclado o abrirlo en otra pestaña con clic central.
   - Filtros por estado (Todos, Pendiente, Surtido, En reparto, Entregado, Cancelado), cada uno con su conteo según la búsqueda y las fechas.
   - Búsqueda por folio o nombre del cliente, sin importar acentos ni mayúsculas, y rango Desde / Hasta sobre la fecha de registro.
   - El buscador funciona como el de Nuevo pedido: al hacer clic se despliegan los clientes que tienen pedidos, con cuántos tiene cada uno, y al escribir la lista se reduce. Elegir un cliente deja solo sus pedidos; volver a escribir regresa a buscar por folio o nombre.
@@ -131,7 +132,7 @@ flowchart TD
     B -- 401 --> S[Inicio de sesión: Su sesión expiró]
     B -- Éxito --> D[Lista con filtros y páginas]
     D -- Cambiar de página --> E[Sucursales de los clientes que falten] --> D
-    D -- Clic en el folio --> F[GET /api/pedidos/:id]
+    D -- Clic en la fila o el folio --> F[GET /api/pedidos/:id]
     F -- 404 --> G["No existe un pedido con el folio #id"]
     F -- Éxito --> H[Detalle: avance, cliente y entrega, productos]
     D -- Nuevo pedido --> N["/pedidos/nuevo"]

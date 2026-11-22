@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Pestaña Pedidos: todos los pedidos con filtros por estado, búsqueda, fechas y páginas de 10.
-// Cada folio abre su detalle. El estado y los filtros viven en usarListaPedidos().
+// Un clic en cualquier parte de la fila abre su detalle; el folio es además un enlace, para
+// llegar con el teclado y abrirlo en otra pestaña. El estado y los filtros viven en usarListaPedidos().
 // La lista se actualiza sola cada minuto para reflejar lo que cambia el sistema interno
 // (Surtido, cobro y Entregado).
 
@@ -50,6 +51,23 @@ async function alLimpiar() {
   lista.limpiarFiltros()
   await nextTick()
   document.getElementById(IDS_LISTA.buscar)?.focus()
+}
+
+/**
+ * Clic en una fila de pedido: abre su detalle (Ctrl/Cmd + clic, en otra pestaña). No hace nada si
+ * el clic fue en un enlace o botón de la fila (ya navegan solos; p. ej. el folio) ni si se está
+ * seleccionando texto.
+ */
+function alClicFila(evento: MouseEvent, id: number) {
+  if (evento.target instanceof Element && evento.target.closest('a, button')) return
+  if (window.getSelection()?.toString()) return
+
+  const destino = { name: 'detalle-pedido', params: { id } }
+  if (evento.ctrlKey || evento.metaKey) {
+    window.open(enrutador.resolve(destino).href, '_blank', 'noopener')
+    return
+  }
+  enrutador.push(destino)
 }
 
 // Al llegar a la primera o la última página el botón se deshabilita; el foco pasa al otro.
@@ -126,7 +144,12 @@ async function alCambiarPagina(paso: 1 | -1) {
         </tr>
 
         <template v-else>
-          <tr v-for="fila in lista.filasPagina" :key="fila.id">
+          <tr
+            v-for="fila in lista.filasPagina"
+            :key="fila.id"
+            class="pedidos__fila"
+            @click="alClicFila($event, fila.id)"
+          >
             <td>
               <RouterLink :to="{ name: 'detalle-pedido', params: { id: fila.id } }" class="pedidos__folio">
                 #{{ fila.id }}
@@ -247,6 +270,19 @@ async function alCambiarPagina(paso: 1 | -1) {
 .pedidos__reintentar {
   display: inline-flex;
   margin-top: 12px;
+}
+
+/* Toda la fila abre el detalle. El fondo va en las celdas, que son las que pinta TablaVue. */
+.pedidos__fila {
+  cursor: pointer;
+}
+
+.pedidos__fila > td {
+  transition: background-color 0.15s ease;
+}
+
+.pedidos__fila:hover > td {
+  background: color-mix(in srgb, var(--gf-claro) 12%, var(--gf-superficie));
 }
 
 .pedidos__folio {
