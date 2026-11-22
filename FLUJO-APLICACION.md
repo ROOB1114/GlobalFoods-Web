@@ -67,6 +67,7 @@ La base actual del sistema tiene estas rutas principales:
 ### 4. Nuevo pedido (módulo de ventas)
 
 - `NuevoPedidoVista.vue` se divide en tres pasos y un resumen lateral que se queda fijo al desplazar. En pantallas de menos de 900 px, el resumen va debajo del formulario.
+- Se abre desde Inicio o desde Pedidos y regresa a esa pantalla: la flecha de regresar, Cancelar, Descartar y el botón que aparece después de registrar ("Ir al inicio" o "Ir a Pedidos"). La ruta de navegación y el menú lateral también marcan el origen. Si se entra directo por la URL, regresa a Pedidos.
 - **Cliente**:
   - Al hacer clic en el buscador (o con la flecha abajo) se despliega la lista de todos los clientes activos, por nombre. Al escribir, la lista se reduce al instante desde la primera letra, sin importar acentos ni mayúsculas: primero los que empiezan con lo escrito y después los que lo contienen. La lista sale de `GET /api/clientes/activos`, se pide una vez y se filtra en el navegador. Si la API agrega el teléfono, también se busca por él.
   - Enter elige la opción resaltada, o el cliente si solo queda uno.
@@ -89,7 +90,7 @@ La base actual del sistema tiene estas rutas principales:
 
 ```mermaid
 flowchart TD
-    A[Panel: Nuevo Pedido] --> B[Capturar cliente, sucursal, productos y entrega]
+    A[Inicio o Pedidos: Nuevo pedido] --> B[Capturar cliente, sucursal, productos y entrega]
     B --> C[Registrar pedido]
     C --> D{"¿Datos válidos?"}
     D -- No --> E[Mostrar errores y enfocar el primero] --> B
@@ -101,7 +102,7 @@ flowchart TD
     G -- 401 --> M[Inicio de sesión: Su sesión expiró]
     G -- Éxito --> I["Pedido #folio registrado correctamente"]
     I -- Registrar otro pedido --> B
-    I -- Ir al inicio --> A
+    I -- "Ir al inicio o Ir a Pedidos" --> A
     B -- Cancelar o salir con datos --> J{"¿Descartar el pedido?"}
     J -- Seguir capturando --> B
     J -- Descartar --> K[Ruta elegida]

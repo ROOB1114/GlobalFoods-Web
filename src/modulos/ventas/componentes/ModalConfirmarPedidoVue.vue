@@ -24,6 +24,8 @@ interface Props {
   enviando?: boolean
   /** Folio asignado; solo en el estado de éxito. */
   folio?: string
+  /** Botón del éxito que regresa a la pantalla de origen, p. ej. "Ir al inicio" o "Ir a Pedidos". */
+  textoRegresar: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -34,7 +36,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'confirmar'): void
   (e: 'corregir'): void
-  (e: 'irInicio'): void
+  (e: 'regresar'): void
   (e: 'registrarOtro'): void
 }>()
 
@@ -142,7 +144,7 @@ watch(
         </BotonVue>
       </template>
       <template v-else>
-        <BotonVue variante="secundario" @click="emit('irInicio')">Ir al inicio</BotonVue>
+        <BotonVue variante="secundario" @click="emit('regresar')">{{ textoRegresar }}</BotonVue>
         <BotonVue
           :id="ID_REGISTRAR_OTRO"
           variante="primario"

@@ -81,7 +81,7 @@ async function alCambiarPagina(paso: 1 | -1) {
         </div>
 
         <div class="pedidos__accion">
-          <BotonVue variante="exito" @click="enrutador.push({ name: 'nuevo-pedido' })">
+          <BotonVue variante="exito" @click="enrutador.push({ name: 'nuevo-pedido', query: { desde: 'pedidos' } })">
             <IconoVue nombre="mas" :tamano="16" />
             Nuevo pedido
           </BotonVue>

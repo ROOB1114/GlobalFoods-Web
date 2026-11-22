@@ -128,7 +128,7 @@ Contiene la pestaña **Pedidos** (lista y detalle, solo consulta) y la pantalla 
 
 #### Nuevo pedido
 
-- Ruta: `/pedidos/nuevo` (nombre `nuevo-pedido`, requiere sesión). Se abre con el botón "Nuevo Pedido" del panel.
+- Ruta: `/pedidos/nuevo` (nombre `nuevo-pedido`, requiere sesión). Se abre con el botón "Nuevo pedido" de Inicio (`?desde=inicio`) o de Pedidos (`?desde=pedidos`). `NuevoPedidoVista.vue` lee `desde` para regresar a esa pantalla con la flecha, Cancelar, Descartar y el botón posterior al registro ("Ir al inicio" o "Ir a Pedidos"), y para marcar el origen en la ruta de navegación y en el menú lateral. Sin `desde` o con otro valor, regresa a Pedidos.
 - Vista: `src/modulos/ventas/vistas/NuevoPedidoVista.vue`
 - Componentes: `src/modulos/ventas/componentes/` (secciones Cliente, con el selector de sucursal, Productos y Entrega, resumen lateral y modales Agregar producto, Confirmar pedido y Descartar pedido)
 - Estado y validaciones: `src/modulos/ventas/controladores/usarNuevoPedido.ts` (formulario) y `usarBuscadorClientes.ts` (búsqueda de clientes)
