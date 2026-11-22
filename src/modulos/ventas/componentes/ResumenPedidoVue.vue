@@ -11,7 +11,6 @@ import {
   formatearNumero,
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
-import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
@@ -63,10 +62,6 @@ const SIN_DATO = '—'
       <div class="resumen__dato">
         <dt>Modalidad</dt>
         <dd>{{ resumen.modalidad ? MODALIDADES[resumen.modalidad].titulo : SIN_DATO }}</dd>
-      </div>
-      <div class="resumen__dato">
-        <dt>Método de pago</dt>
-        <dd>{{ textoMetodoPago(resumen.metodoPago) }}</dd>
       </div>
     </dl>
 

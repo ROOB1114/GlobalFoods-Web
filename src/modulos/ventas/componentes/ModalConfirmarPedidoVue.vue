@@ -14,7 +14,6 @@ import {
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
 import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarNuevoPedido'
-import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
@@ -25,6 +24,8 @@ interface Props {
   enviando?: boolean
   /** Folio asignado; solo en el estado de éxito. */
   folio?: string
+  /** Botón del éxito que regresa a la pantalla de origen, p. ej. "Ir al inicio" o "Ir a Pedidos". */
+  textoRegresar: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -35,7 +36,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'confirmar'): void
   (e: 'corregir'): void
-  (e: 'irInicio'): void
+  (e: 'regresar'): void
   (e: 'registrarOtro'): void
 }>()
 
@@ -87,10 +88,6 @@ watch(
         <div v-if="resumen.modalidad === 'recoleccion'" class="confirmacion__dato confirmacion__dato--largo">
           <dt>Punto de recolección</dt>
           <dd>{{ PUNTO_RECOLECCION.nombre }}</dd>
-        </div>
-        <div class="confirmacion__dato">
-          <dt><IconoVue nombre="bolsa" :tamano="16" /> Método de pago</dt>
-          <dd>{{ textoMetodoPago(resumen.metodoPago) }}</dd>
         </div>
         <template v-if="resumen.modalidad === 'domicilio'">
           <div class="confirmacion__dato confirmacion__dato--largo">
@@ -147,7 +144,7 @@ watch(
         </BotonVue>
       </template>
       <template v-else>
-        <BotonVue variante="secundario" @click="emit('irInicio')">Ir al inicio</BotonVue>
+        <BotonVue variante="secundario" @click="emit('regresar')">{{ textoRegresar }}</BotonVue>
         <BotonVue
           :id="ID_REGISTRAR_OTRO"
           variante="primario"

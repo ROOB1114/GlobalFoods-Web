@@ -11,7 +11,7 @@ export interface ProductoVenta {
    */
   codigoProducto: number | null
   talla: string
-  /** Nombre para mostrar, p. ej. "Camarón 16/20". */
+  /** Nombre para mostrar: la talla tal como viene del inventario, p. ej. "26/30" o "PULPO". */
   nombre: string
   presentacion: string
   precioKg: number
@@ -63,8 +63,6 @@ export interface DatosRegistroPedido {
   /** null si no se capturaron. */
   observaciones: string | null
   productos: ProductoRegistroPedido[]
-  /** 0 pendiente, 1 efectivo, 2 tarjeta o transferencia (ver controladores/metodosPago.ts). */
-  metodoPago: number
   /** Totales del resumen. */
   totalKg: number
   total: number
@@ -92,7 +90,10 @@ export interface Pedido {
   total: number
   /** Ver controladores/estadosPedido.ts. */
   estatus: number
-  /** 0 pendiente, 1 efectivo, 2 tarjeta o transferencia (ver controladores/metodosPago.ts); null si la API no lo trae. */
+  /**
+   * 0 pendiente, 1 efectivo, 2 crédito o transferencia (ver controladores/metodosPago.ts); lo cambia
+   * el sistema interno al cobrar. null si la API no lo trae.
+   */
   metodoPago: number | null
   /** Texto tal como viene; leerObservaciones() separa los datos de entrega de las notas. */
   observaciones: string
@@ -128,8 +129,6 @@ export interface ResumenPedido {
   direccionEntrega: string
   referencias: string
   observaciones: string
-  /** Ver controladores/metodosPago.ts. */
-  metodoPago: number
   renglones: RenglonResumen[]
   totalKg: number
   total: number

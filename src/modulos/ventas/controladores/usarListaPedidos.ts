@@ -56,7 +56,7 @@ export interface FilaPedido {
   fechaEntrega: string | null
   /** IdSucursal 0 es recolección; si no, la que diga Observaciones. */
   modalidad: ModalidadEntrega | null
-  /** "Pendiente", "Efectivo" o "Tarjeta o transferencia"; null si la API no lo trae. */
+  /** "Pendiente", "Efectivo" o "Crédito o transferencia"; null si la API no lo trae. */
   metodoPago: string | null
   estado: EstadoPantalla
   total: number

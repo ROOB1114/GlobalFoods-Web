@@ -37,7 +37,7 @@ export interface DetallePedido {
   referencias: string | null
   /** Lo que capturó la asesora (lo que queda después de leer el formato de Observaciones). */
   notas: string | null
-  /** "Pendiente", "Efectivo" o "Tarjeta o transferencia"; null si la API no lo trae. */
+  /** "Pendiente", "Efectivo" o "Crédito o transferencia"; null si la API no lo trae. */
   metodoPago: string | null
   lineas: LineaPedido[]
   totalKg: number

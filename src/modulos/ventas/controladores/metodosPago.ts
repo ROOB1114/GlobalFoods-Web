@@ -1,22 +1,22 @@
 // Método de pago del pedido (columna MetodoPago de PedidosAppVentasHdr): 0 pendiente, 1 efectivo
-// y 2 tarjeta o transferencia. La asesora lo elige en Nuevo pedido (Pendiente si el cliente
-// todavía no lo define) y el sistema interno lo actualiza al cobrar.
+// y 2 crédito o transferencia. Todo pedido nuevo se crea con 0 (pendiente) y solo el sistema
+// interno lo cambia a 1 o 2 al cobrar. La web no lo elige ni lo edita: solo lo muestra en la
+// lista y en el detalle, y al cancelar lo reenvía sin cambios.
 
 export const METODO_PAGO = {
   pendiente: 0,
   efectivo: 1,
-  tarjetaOTransferencia: 2,
+  creditoOTransferencia: 2,
 } as const
 
-/** Opciones de Nuevo pedido, en orden. */
-export const OPCIONES_METODO_PAGO: { valor: number; etiqueta: string }[] = [
-  { valor: METODO_PAGO.pendiente, etiqueta: 'Pendiente' },
-  { valor: METODO_PAGO.efectivo, etiqueta: 'Efectivo' },
-  { valor: METODO_PAGO.tarjetaOTransferencia, etiqueta: 'Tarjeta o transferencia' },
-]
+const ETIQUETAS_METODO_PAGO: Record<number, string> = {
+  [METODO_PAGO.pendiente]: 'Pendiente',
+  [METODO_PAGO.efectivo]: 'Efectivo',
+  [METODO_PAGO.creditoOTransferencia]: 'Crédito o transferencia',
+}
 
 /** Texto del método de pago; null si la API no lo trae y "Método {n}" si no es uno conocido. */
 export function textoMetodoPago(metodo: number | null): string | null {
   if (metodo === null) return null
-  return OPCIONES_METODO_PAGO.find((opcion) => opcion.valor === metodo)?.etiqueta ?? `Método ${metodo}`
+  return ETIQUETAS_METODO_PAGO[metodo] ?? `Método ${metodo}`
 }

@@ -147,7 +147,7 @@ La interfaz de inicio de sesión consulta `POST /api/auth/login`, conserva el to
 
 La pantalla **Nuevo pedido** (`/pedidos/nuevo`, módulo de ventas) captura cliente y sucursal, productos y entrega, pide confirmación y registra el pedido. La búsqueda de clientes usa `GET /api/clientes/activos` y las sucursales del cliente elegido salen de `GET /api/sucursales-clientes?idCliente={id}`. El registro envía el pedido a `POST /api/pedidos` desde `src/modulos/ventas/servicios/servicioPedidos.ts` y muestra como folio el `Id` que asigna la API.
 
-La pestaña **Pedidos** (`/pedidos`) lista todos los pedidos de `GET /api/pedidos` con filtros por estado, búsqueda por folio o cliente, rango de fechas de registro y páginas de 10; cada folio abre su detalle (`/pedidos/:id`, con `GET /api/pedidos/:id`). Es solo consulta: todavía no se cancelan pedidos, porque la API no tiene estado Cancelado ni historial de cambios.
+La pestaña **Pedidos** (`/pedidos`) lista todos los pedidos de `GET /api/pedidos` con filtros por estado, búsqueda por folio o cliente, rango de fechas de registro y páginas de 10; cada fila abre su detalle (`/pedidos/:id`, con `GET /api/pedidos/:id`). Es solo consulta: todavía no se cancelan pedidos, porque la API no tiene estado Cancelado ni historial de cambios.
 
 ## Documentación complementaria
 

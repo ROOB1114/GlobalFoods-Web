@@ -42,7 +42,7 @@ La base actual del sistema tiene estas rutas principales:
 - `/usuarios` → vista de administración de usuarios
 - `/pedidos` → lista de todos los pedidos (desde "Pedidos" en el menú lateral)
 - `/pedidos/nuevo` → captura y registro de un pedido (desde el botón "Nuevo Pedido" del panel o de la lista de pedidos)
-- `/pedidos/:id` → detalle de un pedido (desde el folio en la lista)
+- `/pedidos/:id` → detalle de un pedido (desde su fila o su folio en la lista)
 
 ## Lógica funcional por pantalla
 
@@ -67,11 +67,12 @@ La base actual del sistema tiene estas rutas principales:
 ### 4. Nuevo pedido (módulo de ventas)
 
 - `NuevoPedidoVista.vue` se divide en tres pasos y un resumen lateral que se queda fijo al desplazar. En pantallas de menos de 900 px, el resumen va debajo del formulario.
+- Se abre desde Inicio o desde Pedidos y regresa a esa pantalla: la flecha de regresar, Cancelar, Descartar y el botón que aparece después de registrar ("Ir al inicio" o "Ir a Pedidos"). La ruta de navegación y el menú lateral también marcan el origen. Si se entra directo por la URL, regresa a Pedidos.
 - **Cliente**:
   - Al hacer clic en el buscador (o con la flecha abajo) se despliega la lista de todos los clientes activos, por nombre. Al escribir, la lista se reduce al instante desde la primera letra, sin importar acentos ni mayúsculas: primero los que empiezan con lo escrito y después los que lo contienen. La lista sale de `GET /api/clientes/activos`, se pide una vez y se filtra en el navegador. Si la API agrega el teléfono, también se busca por él.
   - Enter elige la opción resaltada, o el cliente si solo queda uno.
   - La lista se recorre con flechas, Enter y Escape.
-  - Al elegir el cliente se cargan sus sucursales activas. Si tiene una, se selecciona sola; si tiene varias, se elige en la lista; si no tiene, se avisa y no se puede registrar. La sucursal es obligatoria.
+  - Al elegir el cliente se cargan sus sucursales activas. Si tiene una, se selecciona sola; si tiene varias, se elige en la lista; si no tiene, se avisa y solo se puede registrar con recolección. La sucursal es obligatoria a domicilio; en recolección no se pide.
   - Los clientes nuevos no se dan de alta aquí.
 - **Productos**:
   - Salen del inventario real.
@@ -79,16 +80,17 @@ La base actual del sistema tiene estas rutas principales:
   - Si la cantidad supera lo disponible, el renglón se marca al instante.
 - **Entrega**:
   - Modalidad: Entrega a domicilio o Recolección en congeladora.
-  - Fecha requerida, desde hoy.
+  - No se captura fecha de entrega: la registra el sistema interno al cobrar.
   - A domicilio también pide dirección, que por defecto es la registrada de la sucursal elegida, y referencias.
-  - Método de pago: Pendiente (por defecto, si el cliente todavía no lo define), Efectivo o Tarjeta o transferencia. Sale en el resumen y en la confirmación.
+  - Recolección no pide sucursal: muestra el punto de recolección (Proceso Conservación y Comercio (Global Foods)) con un enlace "Ver en Maps".
+  - No se elige método de pago: todo pedido nuevo se crea como Pendiente y solo el sistema interno lo cambia a Efectivo o Crédito o transferencia al cobrar.
   - Las observaciones son opcionales, de máximo 250 caracteres.
 - Al registrar se valida todo y el foco va al primer error. Si todo es válido, se confirma el resumen antes de enviar.
-- El registro usa `POST /api/pedidos` y manda en `MetodoPago` el que se eligió (0 pendiente, 1 efectivo, 2 tarjeta o transferencia). La modalidad, la fecha de entrega y las referencias viajan dentro de `Observaciones`, porque la API no tiene campos para ellas. El folio es `#` y el `Id` del pedido creado.
+- El registro usa `POST /api/pedidos` y manda siempre `MetodoPago` en 0 (pendiente) y en `Fecha` el día en que se crea. A domicilio, `IdSucursal` es la sucursal elegida; en recolección va en 0. La modalidad y las referencias viajan al inicio de `Observaciones` (`A domicilio · Ref: … · notas` o `Recolección en congeladora · notas`), porque la API no tiene campos para ellas. El folio es `#` y el `Id` del pedido creado.
 
 ```mermaid
 flowchart TD
-    A[Panel: Nuevo Pedido] --> B[Capturar cliente, sucursal, productos y entrega]
+    A[Inicio o Pedidos: Nuevo pedido] --> B[Capturar cliente, sucursal, productos y entrega]
     B --> C[Registrar pedido]
     C --> D{"¿Datos válidos?"}
     D -- No --> E[Mostrar errores y enfocar el primero] --> B
@@ -100,7 +102,7 @@ flowchart TD
     G -- 401 --> M[Inicio de sesión: Su sesión expiró]
     G -- Éxito --> I["Pedido #folio registrado correctamente"]
     I -- Registrar otro pedido --> B
-    I -- Ir al inicio --> A
+    I -- "Ir al inicio o Ir a Pedidos" --> A
     B -- Cancelar o salir con datos --> J{"¿Descartar el pedido?"}
     J -- Seguir capturando --> B
     J -- Descartar --> K[Ruta elegida]
@@ -109,13 +111,17 @@ flowchart TD
 ### 5. Pedidos (módulo de ventas)
 
 - **Lista** (`PedidosVista.vue`): todos los pedidos de `GET /api/pedidos`, del más reciente al más antiguo, en páginas de 10.
+  - Un clic en cualquier parte de la fila abre el detalle; con Ctrl/Cmd + clic, en otra pestaña. Si se está seleccionando texto de la fila, no navega. El folio sigue siendo un enlace, para llegar con el teclado o abrirlo en otra pestaña con clic central.
   - Filtros por estado (Todos, Pendiente, Surtido, En reparto, Entregado, Cancelado), cada uno con su conteo según la búsqueda y las fechas.
   - Búsqueda por folio o nombre del cliente, sin importar acentos ni mayúsculas, y rango Desde / Hasta sobre la fecha de registro.
   - El buscador funciona como el de Nuevo pedido: al hacer clic se despliegan los clientes que tienen pedidos, con cuántos tiene cada uno, y al escribir la lista se reduce. Elegir un cliente deja solo sus pedidos; volver a escribir regresa a buscar por folio o nombre.
-  - Entrega y modalidad salen de leer `Observaciones`; también se entienden los pedidos de la app móvil (su bloque `[GlobalFoods:Entrega:v1]` con JSON). Si el pedido no trae ninguno de los dos formatos, se muestra "—".
-- **Detalle** (`DetallePedidoVista.vue`): barra de avance de los cuatro estados, cliente y entrega, y productos con su total. Si el folio no existe, se avisa con un enlace de regreso a la lista.
-- Cancelar pedido: en el detalle, el administrativo ve "Cancelar pedido" mientras el pedido no se haya entregado (Creado, Surtido o En reparto, igual que en la app móvil). Solo pide confirmación y avisa si almacén ya surtió o si ya salió a reparto. Igual que la app, consulta el pedido y lo vuelve a mandar tal como está con `PUT /api/pedidos/:id` y Estatus 5. El pedido no se borra: queda Cancelado, con su propia píldora en los filtros y un aviso en el detalle en lugar de la barra de avance. Todavía no se pide el motivo (RF-PED-03), porque la API no tiene dónde guardarlo.
-- Surtido y Entregado no se cambian en la web: almacén marca Surtido en el sistema interno y, al cobrar ahí mismo, el pedido pasa a Entregado con su método de pago (Efectivo o Tarjeta o transferencia). La lista y el detalle se actualizan solos cada minuto, y al regresar a la pestaña, para reflejarlo. El detalle muestra el método de pago (Pendiente mientras no se cobra).
+  - La columna Entrega es la fecha de entrega que regresa la API (la llena el sistema interno al registrar el pago); mientras no la tenga, "—".
+  - La modalidad sale de leer `Observaciones`, que también entiende los pedidos anteriores y los de la app móvil (traen `Entrega dd/mm/aaaa` después de la modalidad; esa fecha se ignora). Si el texto no empieza con una modalidad, se muestra "—".
+  - Un pedido con `IdSucursal` 0 es de recolección aunque `Observaciones` no lo diga: en lugar de la sucursal se ve "Recolección en congeladora".
+  - La columna Método de pago muestra Pendiente, Efectivo o Crédito o transferencia, igual que el detalle ("—" si la API no lo trae).
+- **Detalle** (`DetallePedidoVista.vue`): barra de avance de los cuatro estados, cliente y entrega, y productos con su total. La fecha de entrega sale del mismo campo de la API que la lista. En recolección se muestra el punto de recolección con su enlace "Ver en Maps"; si además es `IdSucursal` 0, la sucursal dice "Recolección en congeladora". Si el folio no existe, se avisa con un enlace de regreso a la lista.
+- Cancelar pedido: en el detalle, el administrativo ve "Cancelar pedido" mientras el pedido no se haya entregado (Creado, Surtido o En reparto, igual que en la app móvil). Solo pide confirmación y avisa si almacén ya surtió o si ya salió a reparto. Igual que la app, consulta el pedido y lo vuelve a mandar tal como está con `PUT /api/pedidos/:id` y Estatus 5 (el método de pago y la fecha de entrega, si la API los regresa, se reenvían sin cambios). El pedido no se borra: queda Cancelado, con su propia píldora en los filtros y un aviso en el detalle en lugar de la barra de avance. Todavía no se pide el motivo (RF-PED-03), porque la API no tiene dónde guardarlo.
+- Surtido y Entregado no se cambian en la web: almacén marca Surtido en el sistema interno y, al cobrar ahí mismo, el pedido pasa a Entregado con su método de pago (Efectivo o Crédito o transferencia) y su fecha de entrega. La lista y el detalle se actualizan solos cada minuto, y al regresar a la pestaña, para reflejarlo. Ambos muestran el método de pago (Pendiente mientras no se cobra).
 - No se editan pedidos y todavía no hay historial de cambios, porque la API no lo guarda.
 - Si la API responde 401, se cierra la sesión y se pasa a inicio de sesión con "Su sesión expiró. Inicie sesión nuevamente."
 
@@ -126,7 +132,7 @@ flowchart TD
     B -- 401 --> S[Inicio de sesión: Su sesión expiró]
     B -- Éxito --> D[Lista con filtros y páginas]
     D -- Cambiar de página --> E[Sucursales de los clientes que falten] --> D
-    D -- Clic en el folio --> F[GET /api/pedidos/:id]
+    D -- Clic en la fila o el folio --> F[GET /api/pedidos/:id]
     F -- 404 --> G["No existe un pedido con el folio #id"]
     F -- Éxito --> H[Detalle: avance, cliente y entrega, productos]
     D -- Nuevo pedido --> N["/pedidos/nuevo"]

@@ -2,9 +2,10 @@
 // Pantalla Nuevo pedido: captura cliente y sucursal, productos y entrega, confirma y registra.
 // El estado y las reglas viven en usarNuevoPedido(); aquí solo se conectan las secciones,
 // los modales y la navegación.
+// Al salir regresa a la pantalla desde la que se abrió (?desde=inicio o ?desde=pedidos).
 
-import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { RouterLink, onBeforeRouteLeave, useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { RouterLink, onBeforeRouteLeave, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 
 import AvisoVue from '@/componentes/AvisoVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
@@ -27,6 +28,20 @@ const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
 
 const enrutador = useRouter()
+const ruta = useRoute()
+
+/**
+ * Pantallas desde las que se abre Nuevo pedido. `etiqueta` es también el item del menú lateral;
+ * `textoIr` es el botón que aparece después de registrar.
+ */
+const ORIGENES = {
+  inicio: { etiqueta: 'Inicio', ruta: { name: 'panel' }, textoIr: 'Ir al inicio' },
+  pedidos: { etiqueta: 'Pedidos', ruta: { name: 'pedidos' }, textoIr: 'Ir a Pedidos' },
+} as const
+
+/** ?desde=inicio regresa a Inicio; 'pedidos', cualquier otro valor o sin ?desde, a Pedidos. */
+const origen = computed(() => (ruta.query.desde === 'inicio' ? ORIGENES.inicio : ORIGENES.pedidos))
+
 const pedido = reactive(usarNuevoPedido({ alFallarSucursales: () => avisar(MENSAJES.errorSucursales) }))
 
 // Cambia al limpiar el formulario para que el buscador de clientes empiece de cero.
@@ -40,7 +55,7 @@ const mostrarDescartar = ref(false)
 const mensajeAviso = ref('')
 
 // Ruta a la que se quería ir cuando se pidió confirmar el descarte.
-let destinoPendiente: string | null = null
+let destinoPendiente: RouteLocationRaw | null = null
 // Ya se confirmó el descarte: la salida que sigue no vuelve a preguntar.
 let salidaConfirmada = false
 
@@ -106,16 +121,17 @@ function limpiarFormulario() {
   pedido.cargarInventario()
 }
 
-function irAlInicio() {
-  enrutador.push('/panel')
+// Tras registrar el formulario ya está limpio, así que no pide confirmar el descarte.
+function irAlOrigen() {
+  enrutador.push(origen.value.ruta)
 }
 
 function alCancelar() {
   if (!pedido.hayDatosCapturados) {
-    enrutador.push('/panel')
+    enrutador.push(origen.value.ruta)
     return
   }
-  destinoPendiente = '/panel'
+  destinoPendiente = origen.value.ruta
   mostrarDescartar.value = true
 }
 
@@ -127,7 +143,7 @@ function alSeguirCapturando() {
 function alDescartar() {
   salidaConfirmada = true
   mostrarDescartar.value = false
-  enrutador.push(destinoPendiente ?? '/panel')
+  enrutador.push(destinoPendiente ?? origen.value.ruta)
 }
 
 // Cualquier salida con datos capturados (menú lateral, botón atrás, cerrar sesión) pide confirmar.
@@ -148,12 +164,12 @@ onBeforeRouteLeave((destino) => {
     titulo="Sistema de Venta a Menudeo"
     :usuario="nombreUsuario"
     :items-navegacion="itemsNavegacion"
-    item-activo="Pedidos"
+    :item-activo="origen.etiqueta"
   >
     <div class="nuevo-pedido">
       <nav class="migas" aria-label="Ruta de navegación">
         <ol class="migas__lista">
-          <li><RouterLink :to="{ name: 'pedidos' }" class="migas__enlace">Pedidos</RouterLink></li>
+          <li><RouterLink :to="origen.ruta" class="migas__enlace">{{ origen.etiqueta }}</RouterLink></li>
           <li aria-current="page">
             <span class="migas__separador" aria-hidden="true">›</span>
             Nuevo pedido
@@ -166,7 +182,7 @@ onBeforeRouteLeave((destino) => {
         <button
           type="button"
           class="btn-regresar"
-          aria-label="Volver a inicio"
+          :aria-label="`Volver a ${origen.etiqueta}`"
           @click="alCancelar"
         >
           <IconoVue nombre="flecha-izquierda" :tamano="20" />
@@ -216,7 +232,6 @@ onBeforeRouteLeave((destino) => {
 
           <SeccionEntregaVue
             v-model:modalidad="pedido.modalidad"
-            v-model:metodo-pago="pedido.metodoPago"
             v-model:usar-direccion-registrada="pedido.usarDireccionRegistrada"
             v-model:direccion-entrega="pedido.direccionEntrega"
             v-model:referencias="pedido.referencias"
@@ -252,9 +267,10 @@ onBeforeRouteLeave((destino) => {
     :resumen="pedido.resumen"
     :enviando="pedido.enviando"
     :folio="folioRegistrado"
+    :texto-regresar="origen.textoIr"
     @confirmar="alConfirmar"
     @corregir="mostrarConfirmacion = false"
-    @ir-inicio="irAlInicio"
+    @regresar="irAlOrigen"
     @registrar-otro="mostrarConfirmacion = false"
   />
 

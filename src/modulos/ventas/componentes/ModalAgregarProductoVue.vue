@@ -78,7 +78,7 @@ async function agregar(producto: ProductoVenta) {
       :id="ID_BUSQUEDA"
       v-model="busqueda"
       etiqueta="Buscar producto"
-      marcador="Talla o nombre, por ejemplo 16/20"
+      marcador="Talla o código, por ejemplo 16/20"
       icono="lupa"
       compacto
       autocomplete="off"
