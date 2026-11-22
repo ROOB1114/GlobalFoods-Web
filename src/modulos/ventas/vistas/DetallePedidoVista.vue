@@ -251,7 +251,7 @@ async function alConfirmarCancelacion() {
 
           <TablaVue :columnas="columnasProductos">
             <tr v-for="(linea, indice) in consulta.pedido.lineas" :key="indice">
-              <td class="productos__talla">Camarón {{ linea.talla }}</td>
+              <td class="productos__talla">{{ linea.talla || SIN_DATO }}</td>
               <td class="tabla__celda--derecha">{{ formatearKg(linea.cantidadKg) }}</td>
               <td class="tabla__celda--derecha">{{ formatearMoneda(linea.precioKg) }}</td>
               <td class="tabla__celda--derecha">{{ formatearMoneda(linea.subtotal) }}</td>

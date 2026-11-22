@@ -19,8 +19,9 @@ import type {
 import { obtenerSucursalesActivas } from '@/modulos/ventas/servicios/servicioClientesVentas'
 import { registrarPedido } from '@/modulos/ventas/servicios/servicioPedidos'
 
-// TODO: el inventario no trae la presentación del producto; por ahora todo se vende sin cabeza y por kg.
-export const PRESENTACION_PRODUCTO = 'Sin cabeza · venta por kg'
+// TODO: el inventario no trae nombre ni presentación del producto, solo la talla (p. ej. "26/30"
+// o "PULPO"); por ahora solo se indica que se vende por kg.
+export const PRESENTACION_PRODUCTO = 'Venta por kg'
 
 export const MAXIMO_OBSERVACIONES = 250
 
@@ -73,7 +74,8 @@ export function aProductoVenta(articulo: ArticuloInventario, indice: number): Pr
     productoId: codigoProducto !== null ? String(codigoProducto) : `sin-codigo-${indice}`,
     codigoProducto,
     talla: articulo.talla,
-    nombre: `Camarón ${articulo.talla}`,
+    // El inventario no trae nombre: se muestra la talla tal cual.
+    nombre: articulo.talla.trim(),
     presentacion: PRESENTACION_PRODUCTO,
     precioKg: articulo.precio,
     disponibleKg: articulo.cantidadKg,

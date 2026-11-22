@@ -11,7 +11,7 @@ export interface ProductoVenta {
    */
   codigoProducto: number | null
   talla: string
-  /** Nombre para mostrar, p. ej. "Camarón 16/20". */
+  /** Nombre para mostrar: la talla tal como viene del inventario, p. ej. "26/30" o "PULPO". */
   nombre: string
   presentacion: string
   precioKg: number
