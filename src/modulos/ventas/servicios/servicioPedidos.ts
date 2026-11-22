@@ -17,8 +17,9 @@ const LIMITE_ESPERA_MS = 10_000
 /** Cuerpo de POST /api/pedidos. */
 interface PedidoAPI {
   IdCliente: number
+  /** 0 en recolección: el pedido no va a una sucursal del cliente. */
   IdSucursal: number
-  /** Fecha del pedido como entero aaaammdd, p. ej. 20261027. */
+  /** Día en que se crea el pedido, como entero aaaammdd, p. ej. 20261027. */
   Fecha: number
   TotalKG: number
   Total: number
@@ -50,9 +51,20 @@ interface PedidoConsultadoAPI {
   Estatus: number
   /** Puede no venir si la API todavía no lo regresa. */
   MetodoPago?: number | null
+  /**
+   * Fecha de entrega como entero aaaammdd; la llena el sistema interno al registrar el pago.
+   * Todavía no existe en la API: puede no venir, y puede llegar con cualquiera de los dos nombres.
+   * null o 0 = sin fecha.
+   */
+  FechaEntrega?: number | null
+  fechaEntrega?: number | null
   Observaciones: string | null
   lineas?: LineaConsultadaAPI[]
 }
+
+/** Nombres con los que puede llegar la fecha de entrega. */
+const CAMPOS_FECHA_ENTREGA = ['FechaEntrega', 'fechaEntrega'] as const
+type CampoFechaEntrega = (typeof CAMPOS_FECHA_ENTREGA)[number]
 
 interface LineaConsultadaAPI {
   Id: number
@@ -173,10 +185,32 @@ function aNumero(valor: unknown): number {
   return Number.isFinite(numero) ? numero : 0
 }
 
-/** 20261027 → "2026-10-27"; vacío si no es una fecha aaaammdd. */
+/** 20261027 → "2026-10-27"; vacío si no es una fecha aaaammdd (también con null, 0 o sin valor). */
 function fechaIsoDeEntero(fecha: unknown): string {
   const texto = String(fecha)
   return /^\d{8}$/.test(texto) ? `${texto.slice(0, 4)}-${texto.slice(4, 6)}-${texto.slice(6, 8)}` : ''
+}
+
+/** Fecha de entrega como aaaa-mm-dd, venga como "FechaEntrega" o "fechaEntrega"; null si no trae. */
+function fechaEntregaDe(pedido: PedidoConsultadoAPI): string | null {
+  for (const campo of CAMPOS_FECHA_ENTREGA) {
+    const fecha = fechaIsoDeEntero(pedido[campo])
+    if (fecha) return fecha
+  }
+  return null
+}
+
+/**
+ * La fecha de entrega tal como llegó y con el mismo nombre, para reenviarla sin cambios.
+ * Vacío si la API no la trae o viene null (igual que MetodoPago).
+ */
+function camposFechaEntrega(pedido: PedidoConsultadoAPI): Partial<Record<CampoFechaEntrega, number>> {
+  const campos: Partial<Record<CampoFechaEntrega, number>> = {}
+  for (const campo of CAMPOS_FECHA_ENTREGA) {
+    const valor = pedido[campo]
+    if (valor !== undefined && valor !== null) campos[campo] = valor
+  }
+  return campos
 }
 
 function aLinea(linea: LineaConsultadaAPI): LineaPedido {
@@ -196,6 +230,7 @@ function aPedido(pedido: PedidoConsultadoAPI): Pedido {
     idCliente: aNumero(pedido.IdCliente),
     idSucursal: aNumero(pedido.IdSucursal),
     fechaRegistro: fechaIsoDeEntero(pedido.Fecha),
+    fechaEntrega: fechaEntregaDe(pedido),
     totalKg: aNumero(pedido.TotalKG),
     total: aNumero(pedido.Total),
     estatus: aNumero(pedido.Estatus),
@@ -230,8 +265,9 @@ export async function registrarPedido(datos: DatosRegistroPedido): Promise<Respu
 /**
  * Cancela un pedido (baja lógica): lo vuelve a mandar tal como está, con Estatus 5. Es lo mismo
  * que hace la app móvil; la API no tiene una ruta aparte para cancelar ni dónde guardar el motivo.
- * Primero lo consulta, para reenviar sus datos actuales sin tocarlos (fecha, observaciones y
- * líneas tal como vienen) y para no cancelar uno que ya se entregó o se canceló.
+ * Primero lo consulta, para reenviar sus datos actuales sin tocarlos (fecha, método de pago,
+ * fecha de entrega, observaciones y líneas tal como vienen) y para no cancelar uno que ya se
+ * entregó o se canceló.
  *
  *   GET /api/pedidos/:id                → el pedido actual
  *   PUT /api/pedidos/:id                → el mismo pedido con Estatus 5
@@ -262,8 +298,9 @@ export async function cancelarPedido(id: number): Promise<void> {
       TotalKG: actual.TotalKG,
       Total: actual.Total,
       Estatus: ESTATUS.cancelado,
-      // Solo si la API ya lo regresa, para no cambiarlo.
+      // Solo si la API ya los regresa, para no cambiarlos.
       ...(actual.MetodoPago === undefined || actual.MetodoPago === null ? {} : { MetodoPago: actual.MetodoPago }),
+      ...camposFechaEntrega(actual),
       Observaciones: actual.Observaciones,
       lineas: (actual.lineas ?? []).map((linea) => ({
         CodigoProducto: linea.CodigoProducto,
