@@ -1,8 +1,10 @@
 import { computed, ref, shallowRef } from 'vue'
 
 import { estadoDePedido, type EstadoPantalla } from '@/modulos/ventas/controladores/estadosPedido'
+import { MODALIDADES } from '@/modulos/ventas/controladores/formatosPedido'
 import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+import { esSucursalRecoleccion, modalidadDePedido } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { usarDirectorioPedidos } from '@/modulos/ventas/controladores/usarDirectorioPedidos'
 import type { LineaPedido, ModalidadEntrega, Pedido } from '@/modulos/ventas/interfaces/pedido'
 import { ErrorPedidos, obtenerPedidoPorId } from '@/modulos/ventas/servicios/servicioPedidos'
@@ -23,16 +25,19 @@ export interface DetallePedido {
   /** aaaa-mm-dd */
   registrado: string
   cliente: string
+  /** Nombre de la sucursal; "Recolección en congeladora" si es IdSucursal 0. */
   sucursal: string
+  /** null en recolección: ahí la vista muestra el punto de recolección. */
   direccionEntrega: string | null
   telefonoSucursal: string | null
+  /** IdSucursal 0 es recolección; si no, la que diga Observaciones. */
   modalidad: ModalidadEntrega | null
-  /** aaaa-mm-dd */
+  /** aaaa-mm-dd, de la API; null mientras el sistema interno no registra el pago. */
   fechaEntrega: string | null
   referencias: string | null
   /** Lo que capturó la asesora (lo que queda después de leer el formato de Observaciones). */
   notas: string | null
-  /** "Pendiente", "Efectivo" o "Crédito o transferencia"; null si la API no lo trae. */
+  /** "Pendiente", "Efectivo" o "Tarjeta o transferencia"; null si la API no lo trae. */
   metodoPago: string | null
   lineas: LineaPedido[]
   totalKg: number
@@ -65,7 +70,8 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
     }
     try {
       const [pedido] = await Promise.all([obtenerPedidoPorId(id), directorio.cargarClientes()])
-      await directorio.cargarSucursales([pedido.idCliente])
+      // Recolección (IdSucursal 0) no tiene sucursal que buscar.
+      if (!esSucursalRecoleccion(pedido.idSucursal)) await directorio.cargarSucursales([pedido.idCliente])
       encontrado.value = pedido
     } catch (error) {
       const motivo = error instanceof ErrorPedidos ? error.motivo : null
@@ -86,21 +92,23 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
     if (!actual) return null
 
     const entrega = leerObservaciones(actual.observaciones)
-    const sucursal = directorio.buscarSucursal(actual.idCliente, actual.idSucursal)
+    const sinSucursal = esSucursalRecoleccion(actual.idSucursal)
+    const sucursal = sinSucursal ? null : directorio.buscarSucursal(actual.idCliente, actual.idSucursal)
+    const modalidad = modalidadDePedido(actual.idSucursal, entrega.modalidad)
     // La de "Dir:" si viene en Observaciones; si no, la de la sucursal. En recolección no hay entrega.
     const direccionEntrega =
-      entrega.modalidad === 'recoleccion' ? null : (entrega.direccion ?? sucursal?.direccion ?? null)
+      modalidad === 'recoleccion' ? null : (entrega.direccion ?? sucursal?.direccion ?? null)
 
     return {
       id: actual.id,
       estado: estadoDePedido(actual.estatus),
       registrado: actual.fechaRegistro,
       cliente: directorio.nombreCliente(actual.idCliente),
-      sucursal: sucursal?.nombre ?? `Sucursal #${actual.idSucursal}`,
+      sucursal: sinSucursal ? MODALIDADES.recoleccion.titulo : (sucursal?.nombre ?? `Sucursal #${actual.idSucursal}`),
       direccionEntrega,
       telefonoSucursal: sucursal?.telefono ?? null,
-      modalidad: entrega.modalidad,
-      fechaEntrega: entrega.fechaEntrega,
+      modalidad,
+      fechaEntrega: actual.fechaEntrega,
       referencias: entrega.referencias,
       notas: entrega.notas,
       metodoPago: textoMetodoPago(actual.metodoPago),

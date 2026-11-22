@@ -4,8 +4,9 @@ import {
   obtenerInventarioActual,
   type ArticuloInventario,
 } from '@/modulos/almacen/servicios/servicioInventario'
-import { fechaHoyIso, formatearNumero } from '@/modulos/ventas/controladores/formatosPedido'
+import { formatearNumero } from '@/modulos/ventas/controladores/formatosPedido'
 import { METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
+import { ID_SUCURSAL_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { Cliente, SucursalCliente } from '@/modulos/ventas/interfaces/cliente'
 import type {
   DatosRegistroPedido,
@@ -31,8 +32,6 @@ export const MENSAJES = {
   productosRequeridos: 'Agregue al menos un producto al pedido.',
   cantidadInvalida: 'La cantidad debe ser mayor que cero.',
   modalidadRequerida: 'Seleccione la modalidad de entrega.',
-  fechaRequerida: 'Seleccione la fecha requerida de entrega.',
-  fechaPasada: 'La fecha de entrega no puede ser anterior a hoy.',
   direccionRequerida: 'Capture la dirección de entrega.',
   referenciasRequeridas: 'Capture las referencias de la entrega.',
   inventarioNoDisponible: 'No es posible confirmar la disponibilidad en este momento.',
@@ -56,7 +55,6 @@ export const IDS_CAMPOS = {
   errorProductos: 'pedido-productos-error',
   modalidad: 'pedido-modalidad-domicilio',
   errorModalidad: 'pedido-modalidad-error',
-  fecha: 'pedido-fecha',
   direccion: 'pedido-direccion',
   referencias: 'pedido-referencias',
   observaciones: 'pedido-observaciones',
@@ -123,6 +121,8 @@ function cantidadValida(renglon: RenglonPedido): number | null {
 /**
  * Estado y reglas del formulario de Nuevo pedido: inventario, cliente y sucursal, renglones,
  * entrega, validaciones, totales y registro. La vista solo lo pinta y reacciona a sus resultados.
+ * La sucursal solo se pide a domicilio; en recolección el pedido va con IdSucursal 0.
+ * La fecha de entrega no se captura: la registra el sistema interno al cobrar.
  * Si falla la consulta de sucursales, llama a `alFallarSucursales` para que la vista muestre el aviso.
  */
 export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
@@ -143,7 +143,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
   const sucursal = ref<SucursalCliente | null>(null)
   const renglones = ref<RenglonPedido[]>([])
   const modalidad = ref<ModalidadEntrega | null>(null)
-  const fechaEntrega = ref('')
   const usarDireccionRegistrada = ref(false)
   const direccionEntrega = ref('')
   const referencias = ref('')
@@ -250,13 +249,10 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
 
   function calcularErrores() {
     const domicilio = modalidad.value === 'domicilio'
-    let fecha = ''
-    if (!fechaEntrega.value) fecha = MENSAJES.fechaRequerida
-    else if (fechaEntrega.value < fechaHoyIso()) fecha = MENSAJES.fechaPasada
 
-    // Sin cliente, el error que cuenta es el del cliente.
+    // La sucursal solo se pide a domicilio. Sin cliente, el error que cuenta es el del cliente.
     let mensajeSucursal = ''
-    if (cliente.value && !sucursal.value) {
+    if (domicilio && cliente.value && !sucursal.value) {
       // Si la consulta ya respondió sin sucursales activas, no hay cuál elegir.
       const sinSucursales = !cargandoSucursales.value && !errorSucursales.value && sucursales.value.length === 0
       mensajeSucursal = sinSucursales ? MENSAJES.sinSucursales : MENSAJES.sucursalRequerida
@@ -267,7 +263,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
       sucursal: mensajeSucursal,
       productos: renglones.value.length > 0 ? '' : MENSAJES.productosRequeridos,
       modalidad: modalidad.value ? '' : MENSAJES.modalidadRequerida,
-      fecha,
       direccion: domicilio && !direccionEntrega.value.trim() ? MENSAJES.direccionRequerida : '',
       referencias: domicilio && !referencias.value.trim() ? MENSAJES.referenciasRequeridas : '',
     }
@@ -279,7 +274,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     sucursal: '',
     productos: '',
     modalidad: '',
-    fecha: '',
     direccion: '',
     referencias: '',
   }
@@ -322,7 +316,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     const renglonConError = renglones.value.find((renglon) => erroresCantidad.value[renglon.producto.productoId])
     if (renglonConError) return idCampoCantidad(renglonConError.producto.productoId)
     if (encontrados.modalidad) return IDS_CAMPOS.modalidad
-    if (encontrados.fecha) return IDS_CAMPOS.fecha
     if (encontrados.direccion) return IDS_CAMPOS.direccion
     if (encontrados.referencias) return IDS_CAMPOS.referencias
     return null
@@ -353,9 +346,9 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
 
   const resumen = computed<ResumenPedido>(() => ({
     cliente: cliente.value?.nombre ?? null,
-    sucursal: sucursal.value?.nombre ?? null,
+    // En recolección no se manda la sucursal elegida, así que tampoco se muestra.
+    sucursal: modalidad.value === 'recoleccion' ? null : (sucursal.value?.nombre ?? null),
     modalidad: modalidad.value,
-    fechaEntrega: fechaEntrega.value,
     direccionEntrega: direccionEntrega.value.trim(),
     referencias: referencias.value.trim(),
     observaciones: observaciones.value.trim(),
@@ -370,7 +363,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
       cliente.value !== null ||
       renglones.value.length > 0 ||
       modalidad.value !== null ||
-      fechaEntrega.value !== '' ||
       direccionEntrega.value.trim() !== '' ||
       referencias.value.trim() !== '' ||
       observaciones.value.trim() !== '' ||
@@ -390,17 +382,17 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     return { productoId, codigoProducto, talla, cantidadKg: cantidadKg ?? 0, precioKg, importe }
   }
 
+  /** `idSucursal`: la sucursal elegida a domicilio; ID_SUCURSAL_RECOLECCION (0) en recolección. */
   function datosParaRegistrar(
     clienteActual: Cliente,
-    sucursalActual: SucursalCliente,
+    idSucursal: number,
     modalidadActual: ModalidadEntrega,
   ): DatosRegistroPedido {
     const domicilio = modalidadActual === 'domicilio'
     return {
       clienteId: clienteActual.id,
-      idSucursal: sucursalActual.id,
+      idSucursal,
       modalidad: modalidadActual,
-      fechaEntrega: fechaEntrega.value,
       direccionEntrega: domicilio ? direccionEntrega.value.trim() : null,
       referencias: domicilio ? referencias.value.trim() : null,
       observaciones: observaciones.value.trim() || null,
@@ -420,15 +412,16 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     if (enviando.value) return null
 
     const clienteActual = cliente.value
-    const sucursalActual = sucursal.value
     const modalidadActual = modalidad.value
-    if (validar() !== null || !clienteActual || !sucursalActual || !modalidadActual) {
+    // A domicilio, la sucursal elegida; en recolección no se pide y va la 0.
+    const idSucursal = modalidadActual === 'recoleccion' ? ID_SUCURSAL_RECOLECCION : sucursal.value?.id
+    if (validar() !== null || !clienteActual || !modalidadActual || idSucursal === undefined) {
       throw new Error('El pedido tiene datos incompletos.')
     }
 
     enviando.value = true
     try {
-      const { folio } = await registrarPedido(datosParaRegistrar(clienteActual, sucursalActual, modalidadActual))
+      const { folio } = await registrarPedido(datosParaRegistrar(clienteActual, idSucursal, modalidadActual))
       return folio
     } finally {
       enviando.value = false
@@ -440,7 +433,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     cliente.value = null
     renglones.value = []
     modalidad.value = null
-    fechaEntrega.value = ''
     usarDireccionRegistrada.value = false
     direccionEntrega.value = ''
     referencias.value = ''
@@ -460,7 +452,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
     errorSucursales,
     renglones,
     modalidad,
-    fechaEntrega,
     usarDireccionRegistrada,
     direccionEntrega,
     referencias,

@@ -46,11 +46,12 @@ export interface ProductoRegistroPedido {
 /** Datos del pedido capturado. servicioPedidos los convierte al cuerpo de POST /api/pedidos. */
 export interface DatosRegistroPedido {
   clienteId: number
-  /** Sucursal del cliente a la que va el pedido. */
+  /**
+   * Sucursal del cliente a la que va el pedido (a domicilio). En recolección es 0
+   * (ID_SUCURSAL_RECOLECCION, ver controladores/puntoRecoleccion.ts).
+   */
   idSucursal: number
   modalidad: ModalidadEntrega
-  /** aaaa-mm-dd */
-  fechaEntrega: string
   /**
    * null en recolección.
    * TODO: la API no tiene campo para la dirección de entrega y no se envía; el pedido solo
@@ -78,14 +79,20 @@ export interface RespuestaRegistroPedido {
 export interface Pedido {
   id: number
   idCliente: number
+  /** 0 en los pedidos de recolección (ver controladores/puntoRecoleccion.ts). */
   idSucursal: number
   /** Fecha de registro, aaaa-mm-dd (la API no guarda la hora); vacía si la API trae una fecha no válida. */
   fechaRegistro: string
+  /**
+   * Fecha de entrega, aaaa-mm-dd. La llena el sistema interno al registrar el pago; null mientras
+   * no la tiene (la API no la trae, viene null o 0).
+   */
+  fechaEntrega: string | null
   totalKg: number
   total: number
   /** Ver controladores/estadosPedido.ts. */
   estatus: number
-  /** 0 pendiente, 1 efectivo, 2 crédito o transferencia (ver controladores/metodosPago.ts); null si la API no lo trae. */
+  /** 0 pendiente, 1 efectivo, 2 tarjeta o transferencia (ver controladores/metodosPago.ts); null si la API no lo trae. */
   metodoPago: number | null
   /** Texto tal como viene; leerObservaciones() separa los datos de entrega de las notas. */
   observaciones: string
@@ -115,11 +122,9 @@ export interface RenglonResumen {
 /** Datos del pedido listos para mostrar (resumen lateral y modal de confirmación). */
 export interface ResumenPedido {
   cliente: string | null
-  /** Nombre de la sucursal elegida. */
+  /** Nombre de la sucursal elegida; null si no hay o si es recolección (no lleva sucursal). */
   sucursal: string | null
   modalidad: ModalidadEntrega | null
-  /** aaaa-mm-dd, o vacío si no se ha capturado. */
-  fechaEntrega: string
   direccionEntrega: string
   referencias: string
   observaciones: string

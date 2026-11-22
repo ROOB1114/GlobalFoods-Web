@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Sucursal del cliente elegido: a cuál de sus sucursales activas va el pedido.
 // Con una sola sucursal llega ya seleccionada; con varias, la asesora elige en la lista.
+// En recolección no se pide (el pedido va con IdSucursal 0); solo se avisa que no aplica.
 
 import { computed } from 'vue'
 
@@ -17,12 +18,15 @@ interface Props {
   errorConsulta?: boolean
   /** Error de validación al intentar registrar. */
   error?: string
+  /** Se eligió recolección en congeladora: no se pide sucursal. */
+  recoleccion?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   cargando: false,
   errorConsulta: false,
   error: '',
+  recoleccion: false,
 })
 
 const emit = defineEmits<{
@@ -39,7 +43,12 @@ const hayLista = computed(() => !props.cargando && props.sucursales.length > 1)
 </script>
 
 <template>
-  <div class="sucursal">
+  <div v-if="recoleccion" class="sucursal">
+    <p class="sucursal__etiqueta">Sucursal</p>
+    <p class="sucursal__estado">No aplica: en recolección el cliente pasa por su pedido a la congeladora.</p>
+  </div>
+
+  <div v-else class="sucursal">
     <label v-if="hayLista" class="sucursal__etiqueta" :for="IDS_CAMPOS.sucursal">
       Sucursal<span class="sucursal__obligatorio" aria-hidden="true"> *</span>
     </label>

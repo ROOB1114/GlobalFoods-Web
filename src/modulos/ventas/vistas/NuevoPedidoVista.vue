@@ -194,6 +194,7 @@ onBeforeRouteLeave((destino) => {
               :cargando="pedido.cargandoSucursales"
               :error-consulta="pedido.errorSucursales"
               :error="pedido.errores.sucursal"
+              :recoleccion="pedido.modalidad === 'recoleccion'"
               @reintentar="pedido.cargarSucursales"
             />
           </SeccionClienteVue>
@@ -216,7 +217,6 @@ onBeforeRouteLeave((destino) => {
           <SeccionEntregaVue
             v-model:modalidad="pedido.modalidad"
             v-model:metodo-pago="pedido.metodoPago"
-            v-model:fecha-entrega="pedido.fechaEntrega"
             v-model:usar-direccion-registrada="pedido.usarDireccionRegistrada"
             v-model:direccion-entrega="pedido.direccionEntrega"
             v-model:referencias="pedido.referencias"
