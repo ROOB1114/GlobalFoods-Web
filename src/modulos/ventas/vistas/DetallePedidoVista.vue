@@ -53,6 +53,48 @@ const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
 
 const enrutador = useRouter()
+const ruta = useRoute()
+
+function regresar() {
+  if (window.history.state?.back) {
+    enrutador.back()
+  } else {
+    enrutador.push({ name: 'pedidos' })
+  }
+}
+const rutaAnterior = typeof window.history.state?.back === 'string' ? window.history.state.back : ''
+
+const origen: {
+  itemActivo: string
+  migas: { etiqueta: string; destino: RouteLocationRaw }[]
+} = (() => {
+  if (rutaAnterior.startsWith('/detalle-cliente-vista/')) {
+    return {
+      itemActivo: 'Clientes',
+      migas: [
+        { etiqueta: 'Clientes', destino: '/clientes' },
+        { etiqueta: 'Detalle del Cliente', destino: rutaAnterior },
+      ],
+    }
+  }
+
+  if (
+    rutaAnterior &&
+    !rutaAnterior.startsWith('/pedidos') &&
+    !rutaAnterior.startsWith('/login') &&
+    !rutaAnterior.startsWith('/iniciar-sesion')
+  ) {
+    return {
+      itemActivo: 'Inicio',
+      migas: [{ etiqueta: 'Inicio', destino: rutaAnterior }],
+    }
+  }
+
+  return {
+    itemActivo: 'Pedidos',
+    migas: [{ etiqueta: 'Pedidos', destino: { name: 'pedidos' } }],
+  }
+})()
 // La ruta solo acepta dígitos (/pedidos/:id(\d+)).
 const id = Number(ruta.params.id)
 const consulta = reactive(usarDetallePedido(id, { alVencerSesion: () => salirPorSesionVencida(enrutador) }))
