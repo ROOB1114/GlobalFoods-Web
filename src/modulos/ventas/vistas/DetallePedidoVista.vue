@@ -78,6 +78,13 @@ const origen: {
     }
   }
 
+  if (rutaAnterior.startsWith('/reportes')) {
+    return {
+      itemActivo: 'Reportes',
+      migas: [{ etiqueta: 'Reportes', destino: { name: 'reportes' } }],
+    }
+  }
+
   if (
     rutaAnterior &&
     !rutaAnterior.startsWith('/pedidos') &&

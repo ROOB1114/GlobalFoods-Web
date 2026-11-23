@@ -74,6 +74,11 @@ export function obtenerRolUsuario(): string {
   return (localStorage.getItem('rolUsuario') || 'administrador').toLowerCase()
 }
 
+export function esRolReportes(): boolean {
+  const rol = obtenerRolUsuario()
+  return rol === 'reporte' || rol === 'reportes'
+}
+
 export function obtenerIdUsuarioSesion(): number | null {
   const token = obtenerToken()
   if (!token) return null
@@ -96,7 +101,7 @@ export function obtenerMenuNavegacion(): ItemNavegacion[] {
     { etiqueta: 'Inicio', icono: 'inicio', ruta: '/panel' },
     { etiqueta: 'Pedidos', icono: 'pedidos', ruta: '/pedidos' },
     { etiqueta: 'Clientes', icono: 'clientes', ruta: '/clientes' },
-    { etiqueta: 'Reportes', icono: 'reportes' },
+    { etiqueta: 'Reportes', icono: 'reportes', ruta: '/reportes' },
     { etiqueta: 'Usuarios', icono: 'usuario', ruta: '/usuarios' }
   ]
 
@@ -109,7 +114,7 @@ export function obtenerMenuNavegacion(): ItemNavegacion[] {
   }
 
   if (rol === 'reporte' || rol === 'reportes') {
-    return menuCompleto.filter(item => ['Inicio', 'Reportes'].includes(item.etiqueta))
+    return menuCompleto.filter(item => ['Reportes'].includes(item.etiqueta))
   }
 
   // Si es administrador, retorna todo
