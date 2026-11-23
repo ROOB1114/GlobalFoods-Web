@@ -9,6 +9,7 @@ import {
 import { fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
 import { METODO_PAGO, type MetodoPagoRegistro } from '@/modulos/ventas/controladores/metodosPago'
 import { armarObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+import { esSucursalRecoleccion } from '@/modulos/ventas/controladores/puntoRecoleccion'
 
 import type {
   DatosRegistroPedido,
@@ -26,8 +27,8 @@ const LIMITE_ESPERA_MS = 10_000
 /** Cuerpo de POST /api/pedidos. */
 interface PedidoAPI {
   IdCliente: number
-  /** 0 en recolección: el pedido no va a una sucursal del cliente. */
-  IdSucursal: number
+  /** null en recolección: el pedido no va a una sucursal del cliente (la API no acepta 0). */
+  IdSucursal: number | null
   /** Día en que se crea el pedido, como entero aaaammdd, p. ej. 20261027. */
   Fecha: number
   TotalKG: number
@@ -87,7 +88,7 @@ interface LineaConsultadaAPI {
 /** Cuerpo de PUT /api/pedidos/:id: el pedido completo, no solo lo que cambia. */
 interface PedidoActualizadoAPI extends Partial<Record<CampoFechaEntrega, number>> {
   IdCliente: number
-  IdSucursal: number
+  IdSucursal: number | null
   Fecha: number
   TotalKG: number
   Total: number
@@ -206,10 +207,18 @@ function aLineaPedidoAPI(producto: ProductoRegistroPedido): LineaPedidoAPI {
   }
 }
 
+/**
+ * IdSucursal como lo pide la API: null en recolección. En la web la recolección se maneja como 0
+ * (ver puntoRecoleccion.ts), pero la API responde "IdSucursal debe ser un entero positivo o null".
+ */
+function idSucursalParaApi(idSucursal: number): number | null {
+  return esSucursalRecoleccion(idSucursal) ? null : idSucursal
+}
+
 function aPedidoAPI(datos: DatosRegistroPedido): PedidoAPI {
   return {
     IdCliente: datos.clienteId,
-    IdSucursal: datos.idSucursal,
+    IdSucursal: idSucursalParaApi(datos.idSucursal),
     Fecha: fechaHoyEntero(),
     TotalKG: datos.totalKg,
     Total: datos.total,
@@ -268,7 +277,8 @@ function cuerpoActualizacion(actual: PedidoConsultadoAPI, cambios: CambiosPedido
   const { entrega, ...campos } = cambios
   return {
     IdCliente: actual.IdCliente,
-    IdSucursal: actual.IdSucursal,
+    // Un pedido viejo de recolección puede venir con 0; se reenvía como null para que la API lo acepte.
+    IdSucursal: idSucursalParaApi(aNumero(actual.IdSucursal)),
     Fecha: actual.Fecha,
     TotalKG: actual.TotalKG,
     Total: actual.Total,
@@ -443,7 +453,7 @@ export async function actualizarPedido(id: number, datos: DatosRegistroPedido): 
   await solicitar(rutaPedido(id), 'guardar los cambios del pedido', {
     metodo: 'PUT',
     cuerpo: cuerpoActualizacion(actual, {
-      IdSucursal: datos.idSucursal,
+      IdSucursal: idSucursalParaApi(datos.idSucursal),
       TotalKG: datos.totalKg,
       Total: datos.total,
       Observaciones: armarObservaciones(datos),
