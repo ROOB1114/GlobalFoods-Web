@@ -373,6 +373,10 @@ async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
               <dt>Método de pago</dt>
               <dd>{{ consulta.pedido.metodoPago ?? SIN_DATO }}</dd>
             </div>
+            <div v-if="consulta.pedido.usuarioTelegram !== undefined" class="datos__dato">
+              <dt>Usuario de Telegram</dt>
+              <dd>{{ consulta.pedido.usuarioTelegram ?? SIN_DATO }}</dd>
+            </div>
             <div class="datos__dato datos__dato--ancho">
               <dt>Referencias</dt>
               <dd>{{ consulta.pedido.referencias ?? SIN_DATO }}</dd>
