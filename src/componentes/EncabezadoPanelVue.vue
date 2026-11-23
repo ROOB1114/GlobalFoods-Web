@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router'
 
 import BotonVue from '@/componentes/BotonVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
-import { cerrarSesion } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import { cerrarSesion, obtenerIdUsuarioSesion, obtenerRolUsuario} from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import logo from '@/recursos/logo-transparente.png'
 
 interface Props {
@@ -33,6 +33,15 @@ const iniciales = computed(() =>
     .join('')
     .toUpperCase(),
 )
+
+const esCliente = obtenerRolUsuario() === 'cliente'
+const idClienteSesion = esCliente ? obtenerIdUsuarioSesion() : null
+
+function irAPerfil(): void {
+  if (!idClienteSesion) return
+  enrutador.push({ name: 'detalle-cliente', params: { id: idClienteSesion } })
+}
+
 </script>
 
 <template>
@@ -46,8 +55,21 @@ const iniciales = computed(() =>
     <p class="encabezado__titulo">{{ titulo }}</p>
 
     <div class="encabezado__usuario">
-      <span class="encabezado__avatar" aria-hidden="true">{{ iniciales }}</span>
-      <p class="encabezado__nombre">{{ usuario }}</p>
+      <button
+        v-if="esCliente && idClienteSesion"
+        type="button"
+        class="encabezado__perfil"
+        title="Ver mi perfil"
+        @click="irAPerfil"
+      >
+        <span class="encabezado__avatar" aria-hidden="true">{{ iniciales }}</span>
+        <span class="encabezado__nombre">{{ usuario }}</span>
+      </button>
+
+      <template v-else>
+        <span class="encabezado__avatar" aria-hidden="true">{{ iniciales }}</span>
+        <p class="encabezado__nombre">{{ usuario }}</p>
+      </template>
 
       <BotonVue
         variante="secundario"
@@ -83,6 +105,23 @@ const iniciales = computed(() =>
   padding: 3px;
   border-radius: 6px;
   background: var(--gf-superficie);
+}
+
+.encabezado__perfil {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 4px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.encabezado__perfil:hover {
+  background: color-mix(in srgb, var(--gf-superficie) 14%, transparent);
 }
 
 .encabezado__logo {

@@ -1,8 +1,9 @@
-import { obtenerToken } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import { obtenerRolUsuario, obtenerToken } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { ESTATUS, estadoDePedido, sePuedeCancelar } from '@/modulos/ventas/controladores/estadosPedido'
 import { fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
 import { METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
 import { armarObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+
 import type {
   DatosRegistroPedido,
   LineaPedido,
@@ -321,7 +322,8 @@ export async function cancelarPedido(id: number): Promise<void> {
  *   200 → PedidoConsultadoAPI[]
  */
 export async function obtenerPedidos(): Promise<Pedido[]> {
-  const datos = await solicitar('/api/pedidos', 'consultar los pedidos')
+  const ruta = obtenerRolUsuario() === 'cliente' ? '/api/pedidos/mios' : '/api/pedidos'
+  const datos = await solicitar(ruta, 'consultar los pedidos')
   if (!Array.isArray(datos)) {
     throw new ErrorPedidos('api', 'La respuesta de la API no trae una lista de pedidos válida.')
   }
