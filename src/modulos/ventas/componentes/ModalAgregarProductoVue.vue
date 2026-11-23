@@ -8,7 +8,7 @@ import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
 import ModalVue from '@/componentes/ModalVue.vue'
 import { formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
-import { estaAgotado, tieneCodigoProducto } from '@/modulos/ventas/controladores/usarNuevoPedido'
+import { estaAgotado, tieneCodigoProducto } from '@/modulos/ventas/controladores/usarFormularioPedido'
 import type { ProductoVenta } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {

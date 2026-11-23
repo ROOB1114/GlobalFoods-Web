@@ -32,7 +32,7 @@ export interface DetallePedido {
   telefonoSucursal: string | null
   /** IdSucursal 0 es recolección; si no, la que diga Observaciones. */
   modalidad: ModalidadEntrega | null
-  /** aaaa-mm-dd, de la API; null mientras el sistema interno no registra el pago. */
+  /** aaaa-mm-dd, de la API; null mientras no se registra el pago (en la web o en el sistema interno). */
   fechaEntrega: string | null
   referencias: string | null
   /** Lo que capturó la asesora (lo que queda después de leer el formato de Observaciones). */
@@ -57,8 +57,8 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
 
   /**
    * Pide el pedido a la API. Con `silencioso` (la actualización de cada minuto, o después de
-   * cancelar) se sigue viendo el pedido mientras llega la respuesta y, si falla, se queda como
-   * estaba. Si ya hay una carga visible en curso, la silenciosa no hace nada.
+   * cancelar o registrar el pago) se sigue viendo el pedido mientras llega la respuesta y, si
+   * falla, se queda como estaba. Si ya hay una carga visible en curso, la silenciosa no hace nada.
    */
   async function cargar(opcionesCarga: { silencioso?: boolean } = {}) {
     const silencioso = opcionesCarga.silencioso === true

@@ -1,13 +1,16 @@
 <script setup lang="ts">
 // Detalle de un pedido: avance, cliente y entrega, y productos.
-// "Cancelar pedido" aparece para el administrativo mientras el pedido no se haya entregado
-// (Creado, Surtido o En reparto, igual que en la app móvil); el pedido no se borra, queda
-// Cancelado.
+// Acciones del administrativo (ver permisosPedidos.ts):
+// - "Editar pedido", solo en Pendiente: lleva a /pedidos/:id/editar.
+// - "Registrar pago", en Surtido o En reparto: elige Efectivo o Transferencia y el pedido queda
+//   Entregado con la fecha de entrega de hoy.
+// - "Cancelar pedido", mientras no se haya entregado (Creado, Surtido o En reparto, igual que en
+//   la app móvil); el pedido no se borra, queda Cancelado.
 // Todavía no lleva la tarjeta "Historial del pedido" del diseño: la API no guarda los cambios de
 // estado con su fecha y hora.
-// Se actualiza solo cada minuto para reflejar lo que cambia el sistema interno (Surtido, cobro con
-// su método de pago y fecha de entrega, y Entregado), salvo mientras está abierta la ventana de
-// cancelar.
+// Se actualiza solo cada minuto para reflejar lo que cambia el sistema interno (Surtido y, si el
+// pago se registra ahí, el método de pago, la fecha de entrega y Entregado), salvo mientras está
+// abierta la ventana de cancelar o la de registrar el pago.
 
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
@@ -21,9 +24,20 @@ import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
 import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import AvancePedidoVue from '@/modulos/ventas/componentes/AvancePedidoVue.vue'
 import ModalCancelarPedidoVue from '@/modulos/ventas/componentes/ModalCancelarPedidoVue.vue'
-import { ESTATUS, sePuedeCancelar } from '@/modulos/ventas/controladores/estadosPedido'
+import ModalRegistrarPagoVue from '@/modulos/ventas/componentes/ModalRegistrarPagoVue.vue'
+import {
+  ESTATUS,
+  sePuedeCancelar,
+  sePuedeEditar,
+  sePuedeRegistrarPago,
+} from '@/modulos/ventas/controladores/estadosPedido'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
-import { perfilPuedeCancelar } from '@/modulos/ventas/controladores/permisosPedidos'
+import type { MetodoPagoRegistro } from '@/modulos/ventas/controladores/metodosPago'
+import {
+  perfilPuedeCancelar,
+  perfilPuedeEditar,
+  perfilPuedeRegistrarPago,
+} from '@/modulos/ventas/controladores/permisosPedidos'
 import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
 import { usarActualizacionPeriodica } from '@/modulos/ventas/controladores/usarActualizacionPeriodica'
@@ -32,54 +46,15 @@ import {
   mensajeNoEncontrado,
   usarDetallePedido,
 } from '@/modulos/ventas/controladores/usarDetallePedido'
-import { ErrorPedidos, cancelarPedido } from '@/modulos/ventas/servicios/servicioPedidos'
+import { AVISO_PEDIDO_ACTUALIZADO, MENSAJES_EDICION } from '@/modulos/ventas/controladores/usarEditarPedido'
+import { ErrorPedidos, cancelarPedido, registrarPago } from '@/modulos/ventas/servicios/servicioPedidos'
 
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
 
 const enrutador = useRouter()
-function regresar() {
-  if (window.history.state?.back) {
-    enrutador.back()
-  } else {
-    enrutador.push({ name: 'pedidos' })
-  }
-}
-const rutaAnterior = typeof window.history.state?.back === 'string' ? window.history.state.back : ''
-
-const origen: {
-  itemActivo: string
-  migas: { etiqueta: string; destino: RouteLocationRaw }[]
-} = (() => {
-  if (rutaAnterior.startsWith('/detalle-cliente-vista/')) {
-    return {
-      itemActivo: 'Clientes',
-      migas: [
-        { etiqueta: 'Clientes', destino: '/clientes' },
-        { etiqueta: 'Detalle del Cliente', destino: rutaAnterior },
-      ],
-    }
-  }
-
-  if (
-    rutaAnterior &&
-    !rutaAnterior.startsWith('/pedidos') &&
-    !rutaAnterior.startsWith('/login') &&
-    !rutaAnterior.startsWith('/iniciar-sesion')
-  ) {
-    return {
-      itemActivo: 'Inicio',
-      migas: [{ etiqueta: 'Inicio', destino: rutaAnterior }],
-    }
-  }
-
-  return {
-    itemActivo: 'Pedidos',
-    migas: [{ etiqueta: 'Pedidos', destino: { name: 'pedidos' } }],
-  }
-})()
 // La ruta solo acepta dígitos (/pedidos/:id(\d+)).
-const id = Number(useRoute().params.id)
+const id = Number(ruta.params.id)
 const consulta = reactive(usarDetallePedido(id, { alVencerSesion: () => salirPorSesionVencida(enrutador) }))
 
 const columnasProductos: ColumnaTabla[] = [
@@ -91,7 +66,34 @@ const columnasProductos: ColumnaTabla[] = [
 
 const SIN_DATO = '—'
 
-onMounted(consulta.cargar)
+const folio = `#${id}`
+
+const mensajeAviso = ref('')
+const varianteAviso = ref<'error' | 'exito'>('error')
+
+/** Muestra el aviso; si el mismo texto ya estaba, se vuelve a anunciar. */
+async function avisar(texto: string, variante: 'error' | 'exito') {
+  mensajeAviso.value = ''
+  await nextTick()
+  varianteAviso.value = variante
+  mensajeAviso.value = texto
+}
+
+onMounted(() => {
+  consulta.cargar()
+  // ?aviso=actualizado: se llega aquí después de guardar en Editar pedido. Se quita de la
+  // dirección para que no se repita al recargar.
+  if (ruta.query.aviso === AVISO_PEDIDO_ACTUALIZADO) {
+    avisar(MENSAJES_EDICION.exito, 'exito')
+    enrutador.replace({ query: {} })
+  }
+})
+
+// --- Editar pedido ---
+
+const puedeEditar = computed(
+  () => !!consulta.pedido && sePuedeEditar(consulta.pedido.estado.estatus) && perfilPuedeEditar(),
+)
 
 // --- Cancelar pedido ---
 
@@ -101,7 +103,6 @@ const MENSAJES_CANCELAR = {
   error: 'No fue posible cancelar el pedido. Intente nuevamente.',
 }
 
-const folio = `#${id}`
 const ID_BOTON_CANCELAR = 'detalle-cancelar-pedido'
 
 const puedeCancelar = computed(
@@ -118,19 +119,56 @@ const advertenciaCancelar = computed(() => {
 
 const mostrarCancelar = ref(false)
 const cancelando = ref(false)
-const mensajeAviso = ref('')
-const varianteAviso = ref<'error' | 'exito'>('error')
 
+// --- Registrar pago ---
+
+const MENSAJES_PAGO = {
+  exito: (folio: string) => `Pago registrado. El pedido ${folio} quedó Entregado.`,
+  sinConexion: 'El pago no se guardó por falta de conexión. Intente nuevamente.',
+  error: 'No fue posible registrar el pago. Intente nuevamente.',
+}
+
+const puedeRegistrarPago = computed(
+  () =>
+    !!consulta.pedido && sePuedeRegistrarPago(consulta.pedido.estado.estatus) && perfilPuedeRegistrarPago(),
+)
+
+const mostrarPago = ref(false)
+const registrandoPago = ref(false)
+
+// No se actualiza mientras hay una ventana abierta o un cambio en camino.
 usarActualizacionPeriodica(() => {
-  if (!mostrarCancelar.value && !cancelando.value) consulta.cargar({ silencioso: true })
+  const ocupado = mostrarCancelar.value || cancelando.value || mostrarPago.value || registrandoPago.value
+  if (!ocupado) consulta.cargar({ silencioso: true })
 })
 
-/** Muestra el aviso; si el mismo texto ya estaba, se vuelve a anunciar. */
-async function avisar(texto: string, variante: 'error' | 'exito') {
-  mensajeAviso.value = ''
-  await nextTick()
-  varianteAviso.value = variante
-  mensajeAviso.value = texto
+/**
+ * Manejo común de los errores al cancelar y al registrar el pago. Con 400/409 la API (o la
+ * consulta previa) no lo permitió, p. ej. el pedido ya cambió de estado: se cierra la ventana,
+ * se muestra su mensaje y se recarga el pedido para ver su estado actual. Sin conexión u otro
+ * error, la ventana se queda abierta para reintentar.
+ */
+async function alFallarCambio(
+  error: unknown,
+  mensajes: { sinConexion: string; error: string },
+  cerrarVentana: () => void,
+) {
+  const errorPedidos = error instanceof ErrorPedidos ? error : null
+  if (errorPedidos?.motivo === 'sesion') {
+    salirPorSesionVencida(enrutador)
+    return
+  }
+  if (errorPedidos?.motivo === 'conexion') {
+    avisar(mensajes.sinConexion, 'error')
+    return
+  }
+  if (errorPedidos?.motivo === 'datos_invalidos') {
+    cerrarVentana()
+    avisar(errorPedidos.mensajeApi || mensajes.error, 'error')
+    await consulta.cargar({ silencioso: true })
+    return
+  }
+  avisar(mensajes.error, 'error')
 }
 
 async function alConfirmarCancelacion() {
@@ -141,26 +179,23 @@ async function alConfirmarCancelacion() {
     avisar(MENSAJES_CANCELAR.exito(folio), 'exito')
     await consulta.cargar({ silencioso: true })
   } catch (error) {
-    const motivo = error instanceof ErrorPedidos ? error.motivo : null
-    if (motivo === 'sesion') {
-      salirPorSesionVencida(enrutador)
-      return
-    }
-    if (motivo === 'conexion') {
-      avisar(MENSAJES_CANCELAR.sinConexion, 'error')
-      return
-    }
-    // 400/409: la API no lo permitió (p. ej. el pedido ya cambió de estado). Se muestra su
-    // mensaje y se recarga el pedido para ver su estado actual.
-    if (motivo === 'datos_invalidos') {
-      mostrarCancelar.value = false
-      avisar((error as ErrorPedidos).mensajeApi || MENSAJES_CANCELAR.error, 'error')
-      await consulta.cargar({ silencioso: true })
-      return
-    }
-    avisar(MENSAJES_CANCELAR.error, 'error')
+    await alFallarCambio(error, MENSAJES_CANCELAR, () => (mostrarCancelar.value = false))
   } finally {
     cancelando.value = false
+  }
+}
+
+async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
+  registrandoPago.value = true
+  try {
+    await registrarPago(id, metodoPago)
+    mostrarPago.value = false
+    avisar(MENSAJES_PAGO.exito(folio), 'exito')
+    await consulta.cargar({ silencioso: true })
+  } catch (error) {
+    await alFallarCambio(error, MENSAJES_PAGO, () => (mostrarPago.value = false))
+  } finally {
+    registrandoPago.value = false
   }
 }
 </script>
@@ -192,8 +227,27 @@ async function alConfirmarCancelacion() {
         </button>
         <h1 class="detalle__titulo">Pedido #{{ id }}</h1>
         <ChipEstadoVue v-if="consulta.pedido" :estado="consulta.pedido.estado.chip" :etiqueta="consulta.pedido.estado.etiqueta" />
-        <div v-if="puedeCancelar" class="detalle__acciones">
-          <BotonVue :id="ID_BOTON_CANCELAR" variante="peligro" compacto @click="mostrarCancelar = true">
+        <div v-if="puedeEditar || puedeRegistrarPago || puedeCancelar" class="detalle__acciones">
+          <BotonVue
+            v-if="puedeEditar"
+            variante="secundario"
+            compacto
+            @click="enrutador.push({ name: 'editar-pedido', params: { id } })"
+          >
+            <IconoVue nombre="lapiz" :tamano="16" />
+            Editar pedido
+          </BotonVue>
+          <BotonVue v-if="puedeRegistrarPago" variante="exito" compacto @click="mostrarPago = true">
+            <IconoVue nombre="check" :tamano="16" />
+            Registrar pago
+          </BotonVue>
+          <BotonVue
+            v-if="puedeCancelar"
+            :id="ID_BOTON_CANCELAR"
+            variante="peligro"
+            compacto
+            @click="mostrarCancelar = true"
+          >
             Cancelar pedido
           </BotonVue>
         </div>
@@ -322,6 +376,15 @@ async function alConfirmarCancelacion() {
     @confirmar="alConfirmarCancelacion"
   />
 
+  <ModalRegistrarPagoVue
+    :mostrar="mostrarPago"
+    :folio="folio"
+    :total="consulta.pedido?.total ?? 0"
+    :enviando="registrandoPago"
+    @cerrar="mostrarPago = false"
+    @confirmar="alConfirmarPago"
+  />
+
   <AvisoVue v-model="mensajeAviso" :variante="varianteAviso" />
 </template>
 
@@ -417,7 +480,11 @@ async function alConfirmarCancelacion() {
   font-size: 14px;
 }
 
+/* En columnas: BotonVue ocupa todo el ancho, y así cada uno mide lo que su texto. */
 .detalle__acciones {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 8px;
   margin-left: auto;
 }
 

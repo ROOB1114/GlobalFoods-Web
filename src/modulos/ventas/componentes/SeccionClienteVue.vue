@@ -4,6 +4,7 @@
 // y al escribir la lista se va reduciendo. Flechas para recorrer, Enter para elegir (o elige solo
 // si queda uno) y Escape para cerrar la lista.
 // Con un cliente elegido, el slot pinta debajo de su tarjeta lo que depende de él (la sucursal).
+// Con `fijo` (Editar pedido) solo se muestra el cliente: no se puede cambiar.
 
 import { nextTick, reactive, watch } from 'vue'
 
@@ -13,15 +14,18 @@ import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import { inicialesCliente } from '@/modulos/ventas/controladores/formatosPedido'
 import { usarBuscadorClientes } from '@/modulos/ventas/controladores/usarBuscadorClientes'
-import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarNuevoPedido'
+import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarFormularioPedido'
 import type { Cliente } from '@/modulos/ventas/interfaces/cliente'
 
 interface Props {
   error?: string
+  /** Cliente de un pedido ya registrado: se muestra sin el botón "Cambiar". */
+  fijo?: boolean
 }
 
 withDefaults(defineProps<Props>(), {
   error: '',
+  fijo: false,
 })
 
 const emit = defineEmits<{
@@ -152,7 +156,7 @@ function alPresionarTecla(evento: KeyboardEvent) {
         <p v-if="cliente.telefono" class="tarjeta-cliente__detalle">{{ cliente.telefono }}</p>
       </div>
 
-      <div class="tarjeta-cliente__accion">
+      <div v-if="!fijo" class="tarjeta-cliente__accion">
         <BotonVue
           :id="ID_CAMBIAR"
           variante="secundario"
@@ -168,7 +172,8 @@ function alPresionarTecla(evento: KeyboardEvent) {
 
     <slot v-if="cliente" />
 
-    <p class="seccion-cliente__nota">
+    <p v-if="fijo" class="seccion-cliente__nota">El cliente de un pedido registrado no se puede cambiar.</p>
+    <p v-else class="seccion-cliente__nota">
       ¿Cliente nuevo? Solicita su alta en el sistema interno; aquí solo se consultan clientes registrados.
     </p>
   </section>

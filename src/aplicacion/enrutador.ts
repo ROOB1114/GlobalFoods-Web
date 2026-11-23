@@ -9,6 +9,7 @@ import DetalleClienteVista from '@/modulos/administracion/vistas/DetalleClienteV
 import NuevoPedidoVista from '@/modulos/ventas/vistas/NuevoPedidoVista.vue'
 import PedidosVista from '@/modulos/ventas/vistas/PedidosVista.vue'
 import DetallePedidoVista from '@/modulos/ventas/vistas/DetallePedidoVista.vue'
+import EditarPedidoVista from '@/modulos/ventas/vistas/EditarPedidoVista.vue'
 
 const enrutador = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -51,6 +52,12 @@ const enrutador = createRouter({
       path: '/pedidos/:id(\\d+)',
       name: 'detalle-pedido',
       component: DetallePedidoVista,
+      meta: { requiereAutenticacion: true },
+    },
+    {
+      path: '/pedidos/:id(\\d+)/editar',
+      name: 'editar-pedido',
+      component: EditarPedidoVista,
       meta: { requiereAutenticacion: true },
     },
     {

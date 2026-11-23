@@ -43,6 +43,7 @@ La base actual del sistema tiene estas rutas principales:
 - `/pedidos` → lista de todos los pedidos (desde "Pedidos" en el menú lateral)
 - `/pedidos/nuevo` → captura y registro de un pedido (desde el botón "Nuevo Pedido" del panel o de la lista de pedidos)
 - `/pedidos/:id` → detalle de un pedido (desde su fila o su folio en la lista)
+- `/pedidos/:id/editar` → edición de un pedido Pendiente (desde "Editar pedido" en el detalle)
 
 ## Lógica funcional por pantalla
 
@@ -80,10 +81,10 @@ La base actual del sistema tiene estas rutas principales:
   - Si la cantidad supera lo disponible, el renglón se marca al instante.
 - **Entrega**:
   - Modalidad: Entrega a domicilio o Recolección en congeladora.
-  - No se captura fecha de entrega: la registra el sistema interno al cobrar.
+  - No se captura fecha de entrega: se llena al registrar el pago (en el detalle del pedido o en el sistema interno).
   - A domicilio también pide dirección, que por defecto es la registrada de la sucursal elegida, y referencias.
   - Recolección no pide sucursal: muestra el punto de recolección (Proceso Conservación y Comercio (Global Foods)) con un enlace "Ver en Maps".
-  - No se elige método de pago: todo pedido nuevo se crea como Pendiente y solo el sistema interno lo cambia a Efectivo o Crédito o transferencia al cobrar.
+  - No se elige método de pago: todo pedido nuevo se crea como Pendiente y cambia a Efectivo o Crédito o transferencia al registrar el pago, en el detalle del pedido o en el sistema interno.
   - Las observaciones son opcionales, de máximo 250 caracteres.
 - Al registrar se valida todo y el foco va al primer error. Si todo es válido, se confirma el resumen antes de enviar.
 - El registro usa `POST /api/pedidos` y manda siempre `MetodoPago` en 0 (pendiente) y en `Fecha` el día en que se crea. A domicilio, `IdSucursal` es la sucursal elegida; en recolección va en 0. La modalidad y las referencias viajan al inicio de `Observaciones` (`A domicilio · Ref: … · notas` o `Recolección en congeladora · notas`), porque la API no tiene campos para ellas. El folio es `#` y el `Id` del pedido creado.
@@ -115,14 +116,17 @@ flowchart TD
   - Filtros por estado (Todos, Pendiente, Surtido, En reparto, Entregado, Cancelado), cada uno con su conteo según la búsqueda y las fechas.
   - Búsqueda por folio o nombre del cliente, sin importar acentos ni mayúsculas, y rango Desde / Hasta sobre la fecha de registro.
   - El buscador funciona como el de Nuevo pedido: al hacer clic se despliegan los clientes que tienen pedidos, con cuántos tiene cada uno, y al escribir la lista se reduce. Elegir un cliente deja solo sus pedidos; volver a escribir regresa a buscar por folio o nombre.
-  - La columna Entrega es la fecha de entrega que regresa la API (la llena el sistema interno al registrar el pago); mientras no la tenga, "—".
+  - La columna Entrega es la fecha de entrega que regresa la API (`FechaEntrega`, se llena al registrar el pago); mientras no la tenga, "—".
   - La modalidad sale de leer `Observaciones`, que también entiende los pedidos anteriores y los de la app móvil (traen `Entrega dd/mm/aaaa` después de la modalidad; esa fecha se ignora). Si el texto no empieza con una modalidad, se muestra "—".
   - Un pedido con `IdSucursal` 0 es de recolección aunque `Observaciones` no lo diga: en lugar de la sucursal se ve "Recolección en congeladora".
   - La columna Método de pago muestra Pendiente, Efectivo o Crédito o transferencia, igual que el detalle ("—" si la API no lo trae).
 - **Detalle** (`DetallePedidoVista.vue`): barra de avance de los cuatro estados, cliente y entrega, y productos con su total. La fecha de entrega sale del mismo campo de la API que la lista. En recolección se muestra el punto de recolección con su enlace "Ver en Maps"; si además es `IdSucursal` 0, la sucursal dice "Recolección en congeladora". Si el folio no existe, se avisa con un enlace de regreso a la lista.
-- Cancelar pedido: en el detalle, el administrativo ve "Cancelar pedido" mientras el pedido no se haya entregado (Creado, Surtido o En reparto, igual que en la app móvil). Solo pide confirmación y avisa si almacén ya surtió o si ya salió a reparto. Igual que la app, consulta el pedido y lo vuelve a mandar tal como está con `PUT /api/pedidos/:id` y Estatus 5 (el método de pago y la fecha de entrega, si la API los regresa, se reenvían sin cambios). El pedido no se borra: queda Cancelado, con su propia píldora en los filtros y un aviso en el detalle en lugar de la barra de avance. Todavía no se pide el motivo (RF-PED-03), porque la API no tiene dónde guardarlo.
-- Surtido y Entregado no se cambian en la web: almacén marca Surtido en el sistema interno y, al cobrar ahí mismo, el pedido pasa a Entregado con su método de pago (Efectivo o Crédito o transferencia) y su fecha de entrega. La lista y el detalle se actualizan solos cada minuto, y al regresar a la pestaña, para reflejarlo. Ambos muestran el método de pago (Pendiente mientras no se cobra).
-- No se editan pedidos y todavía no hay historial de cambios, porque la API no lo guarda.
+- Acciones del detalle (por ahora solo para el administrador): "Editar pedido" en Pendiente, "Registrar pago" en Surtido o En reparto y "Cancelar pedido" mientras no se haya entregado. Las tres consultan antes el pedido con `GET /api/pedidos/:id` y, si su estado todavía lo permite, lo vuelven a mandar completo con `PUT /api/pedidos/:id` (el método de pago y la fecha de entrega, si la API los regresa, se reenvían con el mismo nombre de campo, salvo lo que cambia la acción). Si el estado ya no lo permite, no se manda nada y se avisa por qué.
+- Cancelar pedido: Creado, Surtido o En reparto, igual que en la app móvil. Solo pide confirmación y avisa si almacén ya surtió o si ya salió a reparto. Manda el mismo pedido con Estatus 5. El pedido no se borra: queda Cancelado, con su propia píldora en los filtros y un aviso en el detalle en lugar de la barra de avance. Todavía no se pide el motivo (RF-PED-03), porque la API no tiene dónde guardarlo.
+- Registrar pago: en Surtido o En reparto. La ventana muestra el total y pide el método, Efectivo o Transferencia (sin elegir, "Seleccione el método de pago."), y avisa que el pedido quedará Entregado con la fecha de entrega de hoy. Manda el mismo pedido con Estatus 4, el método elegido (1 o 2) y `FechaEntrega` de hoy (`aaaammdd`). Al terminar: "Pago registrado. El pedido #id quedó Entregado." y se recarga el pedido. En la lista y el detalle el 2 se sigue viendo como "Crédito o transferencia", porque el sistema interno lo usa también para crédito.
+- Errores de cancelar y registrar pago: sin conexión, se avisa y la ventana sigue abierta; con 400 o 409 (p. ej. el pedido ya cambió de estado), se cierra, se muestra el mensaje y se recarga el pedido; con otro error, se avisa que no fue posible.
+- Surtido no se cambia en la web: almacén lo marca en el sistema interno. El pago se puede registrar en la web o en el sistema interno; ahí, al cobrar, el pedido pasa a Entregado con su método de pago y su fecha de entrega. La lista y el detalle se actualizan solos cada minuto, y al regresar a la pestaña, para reflejarlo (en el detalle, no mientras está abierta la ventana de cancelar o de pago). Ambos muestran el método de pago (Pendiente mientras no se cobra).
+- Todavía no hay historial de cambios, porque la API no lo guarda.
 - Si la API responde 401, se cierra la sesión y se pasa a inicio de sesión con "Su sesión expiró. Inicie sesión nuevamente."
 
 ```mermaid
@@ -136,6 +140,41 @@ flowchart TD
     F -- 404 --> G["No existe un pedido con el folio #id"]
     F -- Éxito --> H[Detalle: avance, cliente y entrega, productos]
     D -- Nuevo pedido --> N["/pedidos/nuevo"]
+    H -- "Editar pedido (Pendiente)" --> ED["/pedidos/:id/editar"]
+    H -- "Registrar pago (Surtido o En reparto)" --> P["Modal: método de pago"]
+    P -- Registrar pago --> P1[GET + PUT con Estatus 4, MetodoPago y FechaEntrega de hoy]
+    P1 -- Éxito --> P2["Pago registrado. El pedido #id quedó Entregado."] --> H
+    P1 -- "Ya no está en Surtido ni En reparto, 400 o 409" --> P3[Mensaje y recarga del pedido] --> H
+```
+
+### 6. Editar pedido (módulo de ventas)
+
+- `EditarPedidoVista.vue` usa las mismas secciones, resumen y modales que Nuevo pedido, y la misma lógica de formulario (`usarFormularioPedido.ts`); lo propio de la edición está en `usarEditarPedido.ts`. Solo se edita un pedido Pendiente (RF-PED-02).
+- Al abrir, carga el pedido y llena el formulario: cliente fijo (no se puede cambiar), sucursal, modalidad, referencias, observaciones y productos con su cantidad. La sucursal se elige cuando llegan las sucursales activas del cliente.
+- Se pueden cambiar productos y cantidades, modalidad, sucursal, dirección y referencias, y observaciones, con las mismas validaciones y mensajes que Nuevo pedido.
+- Las líneas que ya traía el pedido conservan su precio por kg; las nuevas toman el del inventario. El límite de una línea que ya venía es lo disponible o lo que ya tenía, lo que sea mayor; si su producto ya no está en el inventario, no se puede aumentar.
+- Si el pedido ya no está Pendiente, en lugar del formulario se avisa "El pedido ya no puede modificarse porque se encuentra [estado]." con un enlace al detalle.
+- Guardar confirma "¿Guardar los cambios del pedido #id por $total?", vuelve a consultar el pedido y, si sigue Pendiente, lo manda con `PUT /api/pedidos/:id` con la sucursal, los totales, las observaciones y las líneas nuevas; el cliente, la fecha, el estatus, el método de pago y la fecha de entrega van tal como llegaron.
+
+```mermaid
+flowchart TD
+    A["Detalle: Editar pedido"] --> B[GET /api/pedidos/:id + inventario + clientes]
+    B -- 404 --> C["No existe un pedido con el folio #id"]
+    B -- "No está Pendiente" --> D["El pedido ya no puede modificarse porque se encuentra [estado]"]
+    B -- Pendiente --> E[Formulario lleno + sucursales del cliente]
+    E --> F[Guardar cambios]
+    F --> G{"¿Datos válidos?"}
+    G -- No --> H[Mostrar errores y enfocar el primero] --> E
+    G -- Sí --> I["Modal: ¿Guardar los cambios del pedido #id por $total?"]
+    I -- Corregir --> E
+    I -- Guardar cambios --> J[GET + PUT /api/pedidos/:id]
+    J -- "Ya no está Pendiente" --> K["El pedido cambió a [estado] mientras lo editaba"] --> E
+    J -- Error --> L[No fue posible guardar los cambios] --> E
+    J -- 401 --> M[Inicio de sesión: Su sesión expiró]
+    J -- Éxito --> N["Detalle: Pedido actualizado correctamente."]
+    E -- Salir con cambios --> O{"¿Descartar los cambios?"}
+    O -- Seguir editando --> E
+    O -- Descartar cambios --> P[Ruta elegida]
 ```
 
 ## Relación con los módulos
@@ -151,4 +190,4 @@ El flujo general del sistema está pensado para que cada módulo tenga una respo
 
 ## Observación de desarrollo
 
-El inicio de sesión y la consulta de inventario ya están conectados con la API. En ventas, Nuevo pedido ya usa el inventario, los clientes activos, sus sucursales y el registro de pedidos reales, y la pestaña Pedidos consulta la lista y el detalle de los pedidos. Las pantallas de administración y reparto todavía requieren integrar sus operaciones con el backend.
+El inicio de sesión y la consulta de inventario ya están conectados con la API. En ventas, Nuevo pedido ya usa el inventario, los clientes activos, sus sucursales y el registro de pedidos reales, y la pestaña Pedidos consulta la lista y el detalle, edita los pedidos pendientes, registra el pago y cancela. Las pantallas de administración y reparto todavía requieren integrar sus operaciones con el backend.

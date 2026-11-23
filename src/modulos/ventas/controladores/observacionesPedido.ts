@@ -6,8 +6,8 @@ import type { DatosRegistroPedido, ModalidadEntrega } from '@/modulos/ventas/int
 //   "Recolección en congeladora · Pasa por la tarde"
 // armarObservaciones() escribe ese formato y leerObservaciones() lo lee; si cambia, se cambia aquí.
 //
-// La fecha de entrega ya no va en Observaciones: la API la regresa en su propio campo cuando el
-// sistema interno registra el pago. Los pedidos anteriores y los de la app móvil sí traen
+// La fecha de entrega ya no va en Observaciones: la API la regresa en su propio campo
+// (FechaEntrega) cuando se registra el pago. Los pedidos anteriores y los de la app móvil sí traen
 // "Entrega dd/mm/aaaa" justo después de la modalidad; la lectura lo acepta y lo ignora.
 // La lectura también reconoce "Dir: {dirección}" (a domicilio, antes de las notas), aunque hoy
 // Nuevo pedido no lo escribe.

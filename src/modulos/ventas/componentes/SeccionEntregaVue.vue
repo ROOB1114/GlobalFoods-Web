@@ -2,14 +2,14 @@
 // Paso 3 del pedido: modalidad y, si es a domicilio, dirección y referencias (en recolección, el
 // punto donde el cliente recoge) y observaciones.
 // No se capturan fecha de entrega ni método de pago: el pedido nace con método de pago pendiente
-// y el sistema interno registra ambos al cobrar.
+// y ambos se llenan al registrar el pago, en el detalle del pedido o en el sistema interno.
 
 import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import { MODALIDADES } from '@/modulos/ventas/controladores/formatosPedido'
 import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
-import { IDS_CAMPOS, MAXIMO_OBSERVACIONES } from '@/modulos/ventas/controladores/usarNuevoPedido'
+import { IDS_CAMPOS, MAXIMO_OBSERVACIONES } from '@/modulos/ventas/controladores/usarFormularioPedido'
 import type { ModalidadEntrega } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {

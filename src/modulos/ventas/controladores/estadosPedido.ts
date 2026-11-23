@@ -4,8 +4,9 @@ import type { EstadoPedido } from '@/componentes/ChipEstadoVue.vue'
 // agregan estados, se ajusta solo aquí.
 
 /**
- * Estatus de pedido que maneja la API (confirmados por el backend). Surtido y Entregado los
- * registra el sistema interno de la empresa (almacén y cobro); la web solo los muestra.
+ * Estatus de pedido que maneja la API (confirmados por el backend). Surtido lo registra el
+ * sistema interno (almacén). Entregado queda al registrar el pago, en el sistema interno o en
+ * el detalle del pedido en la web.
  */
 export const ESTATUS = {
   creado: 1,
@@ -54,6 +55,20 @@ const ESTATUS_CANCELABLES: number[] = [ESTATUS.creado, ESTATUS.surtido, ESTATUS.
 
 export function sePuedeCancelar(estatus: number): boolean {
   return ESTATUS_CANCELABLES.includes(estatus)
+}
+
+/** Solo se edita un pedido Pendiente (Creado): almacén todavía no lo surte (RF-PED-02). */
+const ESTATUS_EDITABLES: number[] = [ESTATUS.creado]
+
+export function sePuedeEditar(estatus: number): boolean {
+  return ESTATUS_EDITABLES.includes(estatus)
+}
+
+/** El pago se registra cuando almacén ya surtió el pedido; al registrarlo, queda Entregado. */
+const ESTATUS_PARA_PAGO: number[] = [ESTATUS.surtido, ESTATUS.enReparto]
+
+export function sePuedeRegistrarPago(estatus: number): boolean {
+  return ESTATUS_PARA_PAGO.includes(estatus)
 }
 
 /** Estado de pantalla de un estatus. Uno desconocido se muestra como "Estado {n}" con el estilo de pendiente. */

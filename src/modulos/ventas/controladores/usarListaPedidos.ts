@@ -52,7 +52,7 @@ export interface FilaPedido {
   sucursal: string
   /** aaaa-mm-dd */
   registrado: string
-  /** aaaa-mm-dd, de la API; null mientras el sistema interno no registra el pago. */
+  /** aaaa-mm-dd, de la API; null mientras no se registra el pago (en la web o en el sistema interno). */
   fechaEntrega: string | null
   /** IdSucursal 0 es recolección; si no, la que diga Observaciones. */
   modalidad: ModalidadEntrega | null

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Pantalla Nuevo pedido: captura cliente y sucursal, productos y entrega, confirma y registra.
-// El estado y las reglas viven en usarNuevoPedido(); aquí solo se conectan las secciones,
-// los modales y la navegación.
+// El estado y las reglas viven en usarNuevoPedido() (sobre usarFormularioPedido(), que comparte
+// con Editar pedido); aquí solo se conectan las secciones, los modales y la navegación.
 // Al salir regresa a la pantalla desde la que se abrió (?desde=inicio o ?desde=pedidos).
 
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
@@ -19,7 +19,8 @@ import SeccionEntregaVue from '@/modulos/ventas/componentes/SeccionEntregaVue.vu
 import SeccionProductosVue from '@/modulos/ventas/componentes/SeccionProductosVue.vue'
 import SelectorSucursalVue from '@/modulos/ventas/componentes/SelectorSucursalVue.vue'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
-import { MENSAJES, usarNuevoPedido } from '@/modulos/ventas/controladores/usarNuevoPedido'
+import { MENSAJES } from '@/modulos/ventas/controladores/usarFormularioPedido'
+import { usarNuevoPedido } from '@/modulos/ventas/controladores/usarNuevoPedido'
 import { descartarClientesEnMemoria } from '@/modulos/ventas/servicios/servicioClientesVentas'
 import { ErrorPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
 import { obtenerNombreUsuario, obtenerMenuNavegacion } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
