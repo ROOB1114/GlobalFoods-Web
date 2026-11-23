@@ -11,7 +11,10 @@ import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
 import { obtenerInventarioActual, type ArticuloInventario } from '@/modulos/almacen/servicios/servicioInventario'
 import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { ESTATUS, estadoDePedido } from '@/modulos/ventas/controladores/estadosPedido'
-import { formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
+import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
+import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
+import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+import { esSucursalRecoleccion, modalidadDePedido } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
 import { usarActualizacionPeriodica } from '@/modulos/ventas/controladores/usarActualizacionPeriodica'
 import { usarDirectorioPedidos } from '@/modulos/ventas/controladores/usarDirectorioPedidos'
@@ -21,6 +24,7 @@ import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servici
 const enrutador = useRouter()
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
+const SIN_DATO = '—'
 
 // --- Inventario ---
 const inventario = ref<ArticuloInventario[]>([])
@@ -35,17 +39,27 @@ const directorio = usarDirectorioPedidos()
 
 const ESTATUS_EN_CURSO = new Set<number>([ESTATUS.creado, ESTATUS.surtido, ESTATUS.enReparto])
 
+function textoSucursal(pedido: Pedido): string {
+  if (esSucursalRecoleccion(pedido.idSucursal)) return MODALIDADES.recoleccion.titulo
+  const sucursal = directorio.buscarSucursal(pedido.idCliente, pedido.idSucursal)
+  if (sucursal === undefined) return 'Sucursal …'
+  return sucursal ? `Sucursal ${sucursal.nombre}` : `Sucursal #${pedido.idSucursal}`
+}
+
 const pedidosActuales = computed(() =>
   pedidos.value
     .filter((pedido) => ESTATUS_EN_CURSO.has(pedido.estatus))
     .map((pedido) => ({
       id: pedido.id,
       cliente: directorio.nombreCliente(pedido.idCliente),
-      articulos: pedido.lineas.length,
-      totalKg: pedido.totalKg,
+      sucursal: textoSucursal(pedido),
+      registrado: pedido.fechaRegistro,
+      fechaEntrega: pedido.fechaEntrega,
+      modalidad: modalidadDePedido(pedido.idSucursal, leerObservaciones(pedido.observaciones).modalidad),
       estado: estadoDePedido(pedido.estatus),
+      metodoPago: textoMetodoPago(pedido.metodoPago),
       total: pedido.total,
-      fecha: pedido.fechaRegistro,
+      totalKg: pedido.totalKg,
     })),
 )
 
@@ -87,6 +101,11 @@ async function cargarPedidos(opciones: { silencioso?: boolean } = {}) {
     const [lista] = await Promise.all([obtenerPedidos(), directorio.cargarClientes()])
     pedidos.value = [...lista].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro) || b.id - a.id)
     errorPedidos.value = ''
+
+    const idsClientesEnCurso = pedidos.value
+      .filter((pedido) => ESTATUS_EN_CURSO.has(pedido.estatus) && !esSucursalRecoleccion(pedido.idSucursal))
+      .map((pedido) => pedido.idCliente)
+    await directorio.cargarSucursales(idsClientesEnCurso)
   } catch (errorCapturado) {
     if (errorCapturado instanceof ErrorPedidos && errorCapturado.motivo === 'sesion') {
       salirPorSesionVencida(enrutador)
@@ -125,9 +144,13 @@ const columnasInventario: ColumnaTabla[] = [
 ]
 
 const columnasPedidos: ColumnaTabla[] = [
-  { clave: 'id', etiqueta: 'ID Pedido' },
-  { clave: 'cliente', etiqueta: 'Cliente' },
+  { clave: 'folio', etiqueta: 'Folio' },
+  { clave: 'cliente', etiqueta: 'Cliente y sucursal' },
+  { clave: 'registrado', etiqueta: 'Registrado' },
+  { clave: 'entrega', etiqueta: 'Entrega' },
+  { clave: 'modalidad', etiqueta: 'Modalidad' },
   { clave: 'estado', etiqueta: 'Estado' },
+  { clave: 'metodoPago', etiqueta: 'Método de pago' },
   { clave: 'total', etiqueta: 'Total', alineacion: 'derecha' },
 ]
 </script>
@@ -163,13 +186,15 @@ const columnasPedidos: ColumnaTabla[] = [
 
         <TablaVue :columnas="columnasInventario" :alto-maximo="altoInventario">
           <tr v-if="cargandoInventario">
-            <td colspan="4" class="panel__mensaje">Cargando inventario...</td>
+            <td :colspan="columnasInventario.length" class="panel__mensaje">Cargando inventario...</td>
           </tr>
           <tr v-else-if="errorInventario">
-            <td colspan="4" class="panel__mensaje panel__error" role="alert">{{ errorInventario }}</td>
+            <td :colspan="columnasInventario.length" class="panel__mensaje panel__error" role="alert">
+              {{ errorInventario }}
+            </td>
           </tr>
           <tr v-else-if="inventario.length === 0">
-            <td colspan="4" class="panel__mensaje">No hay productos disponibles.</td>
+            <td :colspan="columnasInventario.length" class="panel__mensaje">No hay productos disponibles.</td>
           </tr>
           <tr v-for="fila in inventario" :key="fila.talla">
             <td>{{ fila.talla }}</td>
@@ -186,10 +211,10 @@ const columnasPedidos: ColumnaTabla[] = [
 
         <TablaVue :columnas="columnasPedidos" :alto-maximo="altoPedidos">
           <tr v-if="cargandoPedidos">
-            <td colspan="4" class="panel__mensaje">Cargando pedidos...</td>
+            <td :colspan="columnasPedidos.length" class="panel__mensaje">Cargando pedidos...</td>
           </tr>
           <tr v-else-if="errorPedidos">
-            <td colspan="4" class="panel__mensaje">
+            <td :colspan="columnasPedidos.length" class="panel__mensaje">
               <p class="panel__error" role="alert">{{ errorPedidos }}</p>
               <div class="panel__reintentar">
                 <BotonVue variante="secundario" compacto @click="cargarPedidos()">Reintentar</BotonVue>
@@ -197,41 +222,43 @@ const columnasPedidos: ColumnaTabla[] = [
             </td>
           </tr>
           <tr v-else-if="pedidosActuales.length === 0">
-            <td colspan="4" class="panel__mensaje">No hay pedidos pendientes ni en curso.</td>
+            <td :colspan="columnasPedidos.length" class="panel__mensaje">No hay pedidos pendientes ni en curso.</td>
           </tr>
           <tr
-            v-for="pedido in pedidosActuales"
-            :key="pedido.id"
+            v-for="fila in pedidosActuales"
+            :key="fila.id"
             class="fila-clicable"
-            @click="abrirDetallePedido(pedido.id)"
+            @click="abrirDetallePedido(fila.id)"
           >
             <td class="panel__id">
               <RouterLink
-                :to="{ name: 'detalle-pedido', params: { id: pedido.id } }"
+                :to="{ name: 'detalle-pedido', params: { id: fila.id } }"
                 class="panel__folio"
                 @click.stop
               >
-                #{{ pedido.id }}
+                #{{ fila.id }}
               </RouterLink>
             </td>
             <td>
-              <p class="panel__cliente">{{ pedido.cliente }}</p>
-              <p class="panel__detalle">
-                <template v-if="pedido.articulos > 0">
-                  {{ pedido.articulos }} {{ pedido.articulos === 1 ? 'producto' : 'productos' }} ·
-                </template>
-                {{ formatearKg(pedido.totalKg) }}
-              </p>
+              <p class="panel__cliente">{{ fila.cliente }}</p>
+              <p class="panel__detalle">{{ fila.sucursal }}</p>
+            </td>
+            <td>{{ formatearFecha(fila.registrado) || SIN_DATO }}</td>
+            <td>{{ fila.fechaEntrega ? formatearFecha(fila.fechaEntrega) : SIN_DATO }}</td>
+            <td>
+              <span v-if="fila.modalidad" class="panel__modalidad">
+                <IconoVue :nombre="MODALIDADES[fila.modalidad].icono" :tamano="16" />
+                {{ MODALIDADES[fila.modalidad].etiquetaCorta }}
+              </span>
+              <template v-else>{{ SIN_DATO }}</template>
             </td>
             <td>
-              <ChipEstadoVue :estado="pedido.estado.chip" :etiqueta="pedido.estado.etiqueta" />
+              <ChipEstadoVue :estado="fila.estado.chip" :etiqueta="fila.estado.etiqueta" />
             </td>
+            <td>{{ fila.metodoPago ?? SIN_DATO }}</td>
             <td class="tabla__celda--derecha">
-              <p class="panel__total">{{ formatearMoneda(pedido.total) }}</p>
-              <p class="panel__detalle panel__hace">
-                <IconoVue nombre="reloj" :tamano="12" />
-                {{ formatearFecha(pedido.fecha) || '—' }}
-              </p>
+              <p class="panel__total">{{ formatearMoneda(fila.total) }}</p>
+              <p class="panel__detalle">{{ formatearKg(fila.totalKg) }}</p>
             </td>
           </tr>
         </TablaVue>
@@ -245,7 +272,6 @@ const columnasPedidos: ColumnaTabla[] = [
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 1100px;
 }
 
 .panel__bienvenida {
@@ -310,26 +336,27 @@ const columnasPedidos: ColumnaTabla[] = [
 
 .panel__cliente {
   margin: 0;
-  font-weight: 500;
+  color: var(--gf-texto);
+  font-weight: 600;
 }
 
 .panel__detalle {
-  margin: 1px 0 0;
+  margin: 2px 0 0;
   color: var(--gf-texto-tenue);
   font-size: 12px;
 }
 
-.panel__total {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
+.panel__modalidad {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.panel__hace {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
+.panel__total {
+  margin: 0;
+  color: var(--gf-texto);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .fila-clicable {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BotonVue from '@/componentes/BotonVue.vue'
 import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
@@ -22,7 +22,9 @@ import {
 import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { estadoDePedido } from '@/modulos/ventas/controladores/estadosPedido'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
-import { esSucursalRecoleccion } from '@/modulos/ventas/controladores/puntoRecoleccion'
+import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
+import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+import { esSucursalRecoleccion, modalidadDePedido } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
 import type { Pedido } from '@/modulos/ventas/interfaces/pedido'
 import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
@@ -32,6 +34,7 @@ const enrutador = useRouter()
 const clienteId = Number(route.params.id)
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
+const SIN_DATO = '—'
 
 const cliente = ref<ClienteAPI | null>(null)
 const sucursales = ref<any[]>([])
@@ -58,18 +61,35 @@ const columnasSucursales: ColumnaTabla[] = [
 ]
 
 const columnasPedidos: ColumnaTabla[] = [
-  { clave: 'id', etiqueta: 'ID PEDIDO' },
-  { clave: 'sucursal', etiqueta: 'SUCURSAL' },
-  { clave: 'fecha', etiqueta: 'FECHA' },
-  { clave: 'estado', etiqueta: 'ESTADO' },
-  { clave: 'total', etiqueta: 'TOTAL', alineacion: 'derecha' },
+  { clave: 'folio', etiqueta: 'Folio' },
+  { clave: 'sucursal', etiqueta: 'Sucursal' },
+  { clave: 'registrado', etiqueta: 'Registrado' },
+  { clave: 'entrega', etiqueta: 'Entrega' },
+  { clave: 'modalidad', etiqueta: 'Modalidad' },
+  { clave: 'estado', etiqueta: 'Estado' },
+  { clave: 'metodoPago', etiqueta: 'Método de pago' },
+  { clave: 'total', etiqueta: 'Total', alineacion: 'derecha' },
 ]
 
 const obtenerNombreSucursal = (idSucursal: number) => {
   if (esSucursalRecoleccion(idSucursal)) return MODALIDADES.recoleccion.titulo
   const sucursal = sucursales.value.find(s => s.Id === idSucursal)
-  return sucursal ? sucursal.NombreSucursal : `Sucursal #${idSucursal}`
+  return sucursal ? `Sucursal ${sucursal.NombreSucursal}` : `Sucursal #${idSucursal}`
 }
+
+const filasPedidos = computed(() =>
+  pedidos.value.map((ped) => ({
+    id: ped.id,
+    sucursal: obtenerNombreSucursal(ped.idSucursal),
+    registrado: ped.fechaRegistro,
+    fechaEntrega: ped.fechaEntrega,
+    modalidad: modalidadDePedido(ped.idSucursal, leerObservaciones(ped.observaciones).modalidad),
+    estado: estadoDePedido(ped.estatus),
+    metodoPago: textoMetodoPago(ped.metodoPago),
+    total: ped.total,
+    totalKg: ped.totalKg,
+  })),
+)
 
 const abrirDetallePedido = (id: number) => {
   enrutador.push({ name: 'detalle-pedido', params: { id } })
@@ -297,34 +317,40 @@ const confirmarEliminacionSucursal = async () => {
         <!-- SECCIÓN PEDIDOS -->
         <section>
           <EncabezadoSeccionVue titulo="Historial de Pedidos" icono="reloj" />
-          <div v-if="pedidos.length > 0" class="tabla-scroll tabla-scroll--pedidos">
+          <div v-if="filasPedidos.length > 0" class="tabla-scroll tabla-scroll--pedidos">
             <TablaVue :columnas="columnasPedidos">
               <tr
-                v-for="ped in pedidos"
-                :key="ped.id"
+                v-for="fila in filasPedidos"
+                :key="fila.id"
                 class="fila-clicable"
-                @click="abrirDetallePedido(ped.id)"
+                @click="abrirDetallePedido(fila.id)"
               >
                 <td class="panel__id">
                   <RouterLink
-                    :to="{ name: 'detalle-pedido', params: { id: ped.id } }"
+                    :to="{ name: 'detalle-pedido', params: { id: fila.id } }"
                     class="panel__folio"
                     @click.stop
                   >
-                    #{{ ped.id }}
+                    #{{ fila.id }}
                   </RouterLink>
                 </td>
-                <td class="panel__texto-nombre">{{ obtenerNombreSucursal(ped.idSucursal) }}</td>
-                <td>{{ formatearFecha(ped.fechaRegistro) || '—' }}</td>
+                <td class="panel__texto-nombre">{{ fila.sucursal }}</td>
+                <td>{{ formatearFecha(fila.registrado) || SIN_DATO }}</td>
+                <td>{{ fila.fechaEntrega ? formatearFecha(fila.fechaEntrega) : SIN_DATO }}</td>
                 <td>
-                  <ChipEstadoVue
-                    :estado="estadoDePedido(ped.estatus).chip"
-                    :etiqueta="estadoDePedido(ped.estatus).etiqueta"
-                  />
+                  <span v-if="fila.modalidad" class="panel__modalidad">
+                    <IconoVue :nombre="MODALIDADES[fila.modalidad].icono" :tamano="16" />
+                    {{ MODALIDADES[fila.modalidad].etiquetaCorta }}
+                  </span>
+                  <template v-else>{{ SIN_DATO }}</template>
                 </td>
+                <td>
+                  <ChipEstadoVue :estado="fila.estado.chip" :etiqueta="fila.estado.etiqueta" />
+                </td>
+                <td>{{ fila.metodoPago ?? SIN_DATO }}</td>
                 <td class="tabla__celda--derecha">
-                  <p class="panel__total">{{ formatearMoneda(ped.total) }}</p>
-                  <p class="panel__detalle">{{ formatearKg(ped.totalKg) }}</p>
+                  <p class="panel__total">{{ formatearMoneda(fila.total) }}</p>
+                  <p class="panel__detalle">{{ formatearKg(fila.totalKg) }}</p>
                 </td>
               </tr>
             </TablaVue>
@@ -366,7 +392,6 @@ const confirmarEliminacionSucursal = async () => {
   display: flex;
   flex-direction: column;
   gap: 32px;
-  max-width: 1100px;
 }
 
 .panel__encabezado-volver {
@@ -516,6 +541,12 @@ const confirmarEliminacionSucursal = async () => {
 .panel__texto-nombre {
   font-weight: 600;
   color: var(--gf-texto);
+}
+
+.panel__modalidad {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .panel__total {
