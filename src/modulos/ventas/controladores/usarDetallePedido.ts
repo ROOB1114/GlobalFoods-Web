@@ -25,6 +25,8 @@ export interface DetallePedido {
   /** aaaa-mm-dd */
   registrado: string
   cliente: string
+  /** Usuario de Telegram del cliente; null si no tiene; undefined con el rol cliente (no se muestra). */
+  usuarioTelegram: string | null | undefined
   /** Nombre de la sucursal; "Recolección en congeladora" si es IdSucursal 0. */
   sucursal: string
   /** null en recolección: ahí la vista muestra el punto de recolección. */
@@ -70,8 +72,11 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
     }
     try {
       const [pedido] = await Promise.all([obtenerPedidoPorId(id), directorio.cargarClientes()])
-      // Recolección (IdSucursal 0) no tiene sucursal que buscar.
-      if (!esSucursalRecoleccion(pedido.idSucursal)) await directorio.cargarSucursales([pedido.idCliente])
+      await Promise.all([
+        // Recolección (IdSucursal 0) no tiene sucursal que buscar.
+        esSucursalRecoleccion(pedido.idSucursal) ? undefined : directorio.cargarSucursales([pedido.idCliente]),
+        directorio.cargarTelegram(pedido.idCliente),
+      ])
       encontrado.value = pedido
     } catch (error) {
       const motivo = error instanceof ErrorPedidos ? error.motivo : null
@@ -104,6 +109,7 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
       estado: estadoDePedido(actual.estatus),
       registrado: actual.fechaRegistro,
       cliente: directorio.nombreCliente(actual.idCliente),
+      usuarioTelegram: directorio.usuarioTelegram(actual.idCliente),
       sucursal: sinSucursal ? MODALIDADES.recoleccion.titulo : (sucursal?.nombre ?? `Sucursal #${actual.idSucursal}`),
       direccionEntrega,
       telefonoSucursal: sucursal?.telefono ?? null,

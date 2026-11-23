@@ -162,3 +162,42 @@ export async function obtenerSucursalesCliente(idCliente: number): Promise<Sucur
   const sucursales = await consultarSucursales(idCliente)
   return sucursales.map(aSucursal).sort(porNombre)
 }
+
+/** Cliente tal como llega de GET /api/clientes/:id; aquí solo se lee el usuario de Telegram. */
+interface ClientePorIdAPI {
+  UsuarioTelegram?: string | null
+}
+
+/**
+ * Usuario de Telegram de un cliente, para el detalle de un pedido; null si no tiene.
+ *
+ *   GET /api/clientes/:id
+ *   Authorization: Bearer <token>
+ *   200 → { Id, Nombre, Telefono, UsuarioTelegram, ... }
+ *
+ * GET /api/clientes/activos solo trae Id y Nombre, así que se consulta el cliente por Id (igual
+ * que el detalle de cliente). Esa respuesta puede traer también la contraseña: aquí solo se toma
+ * UsuarioTelegram y lo demás se descarta. Si la API lo agrega a /activos, conviene leerlo de ahí.
+ */
+export async function obtenerUsuarioTelegramCliente(idCliente: number): Promise<string | null> {
+  const token = obtenerToken()
+  if (!token) {
+    throw new Error('La sesión no está activa. Inicia sesión nuevamente.')
+  }
+
+  let respuestaHttp: Response
+  try {
+    respuestaHttp = await fetch(`${URL_API.replace(/\/$/, '')}/api/clientes/${encodeURIComponent(idCliente)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  } catch {
+    throw new Error('No se pudo conectar con el servidor para consultar el cliente.')
+  }
+
+  if (!respuestaHttp.ok) {
+    throw new Error('No se pudo consultar el cliente.')
+  }
+
+  const cliente = (await respuestaHttp.json().catch(() => null)) as ClientePorIdAPI | null
+  return textoOpcional(cliente?.UsuarioTelegram)
+}

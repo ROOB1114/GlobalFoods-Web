@@ -181,7 +181,7 @@ const columnasPedidos: ColumnaTabla[] = [
         </div>
 
         <div class="panel__accion">
-          <BotonVue variante="exito" @click="enrutador.push({ name: 'nuevo-pedido' })">
+          <BotonVue variante="exito" @click="enrutador.push({ name: 'nuevo-pedido', query: { desde: 'inicio' } })">
             <IconoVue nombre="mas" :tamano="16" />
             Nuevo Pedido
           </BotonVue>
