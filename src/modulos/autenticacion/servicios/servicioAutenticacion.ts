@@ -86,7 +86,8 @@ export function obtenerIdUsuarioSesion(): number | null {
     const partePayload = token.split('.')[1]
     if (!partePayload) return null
     const base64 = partePayload.replace(/-/g, '+').replace(/_/g, '/')
-    const payload = JSON.parse(atob(base64)) as { userId?: number; sub?: string }
+    const relleno = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const payload = JSON.parse(atob(relleno)) as { userId?: number; sub?: string }
     const id = Number(payload.userId ?? payload.sub)
     return Number.isSafeInteger(id) && id > 0 ? id : null
   } catch {

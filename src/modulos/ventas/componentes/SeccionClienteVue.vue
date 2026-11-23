@@ -6,12 +6,13 @@
 // Con un cliente elegido, el slot pinta debajo de su tarjeta lo que depende de él (la sucursal).
 // Con `fijo` (Editar pedido) solo se muestra el cliente: no se puede cambiar.
 
-import { nextTick, reactive, watch } from 'vue'
+import { computed, nextTick, reactive, watch } from 'vue'
 
 import BotonVue from '@/componentes/BotonVue.vue'
 import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
+import { obtenerIdUsuarioSesion, obtenerNombreUsuario, obtenerRolUsuario, } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { inicialesCliente } from '@/modulos/ventas/controladores/formatosPedido'
 import { usarBuscadorClientes } from '@/modulos/ventas/controladores/usarBuscadorClientes'
 import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarFormularioPedido'
@@ -23,16 +24,29 @@ interface Props {
   fijo?: boolean
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   error: '',
   fijo: false,
 })
+
+const esCliente = obtenerRolUsuario() === 'cliente'
+const esFijo = computed(() => props.fijo || esCliente)
 
 const emit = defineEmits<{
   (e: 'errorBusqueda'): void
 }>()
 
 const cliente = defineModel<Cliente | null>({ required: true })
+if (esCliente && !cliente.value) {
+  const idSesion = obtenerIdUsuarioSesion()
+  if (idSesion) {
+    cliente.value = {
+      id: idSesion,
+      nombre: obtenerNombreUsuario() || `Cliente #${idSesion}`,
+      telefono: '',
+    }
+  }
+}
 
 const buscador = reactive(usarBuscadorClientes({ alFallar: () => emit('errorBusqueda') }))
 
@@ -94,7 +108,7 @@ function alPresionarTecla(evento: KeyboardEvent) {
   <section>
     <EncabezadoSeccionVue :paso="1" titulo="Cliente" icono="clientes" />
 
-    <div v-if="!cliente" class="buscador">
+    <div v-if="!cliente && !esCliente" class="buscador">
       <CampoTextoVue
         :id="IDS_CAMPOS.cliente"
         v-model="buscador.criterio"
@@ -144,7 +158,7 @@ function alPresionarTecla(evento: KeyboardEvent) {
       </ul>
     </div>
 
-    <div v-else class="tarjeta-cliente">
+    <div v-else-if="cliente" class="tarjeta-cliente">
       <span class="tarjeta-cliente__iniciales" aria-hidden="true">{{ inicialesCliente(cliente.nombre) }}</span>
 
       <div :id="ID_SELECCIONADO" class="tarjeta-cliente__datos">
@@ -156,7 +170,7 @@ function alPresionarTecla(evento: KeyboardEvent) {
         <p v-if="cliente.telefono" class="tarjeta-cliente__detalle">{{ cliente.telefono }}</p>
       </div>
 
-      <div v-if="!fijo" class="tarjeta-cliente__accion">
+      <div v-if="!esFijo" class="tarjeta-cliente__accion">
         <BotonVue
           :id="ID_CAMBIAR"
           variante="secundario"
@@ -173,7 +187,7 @@ function alPresionarTecla(evento: KeyboardEvent) {
     <slot v-if="cliente" />
 
     <p v-if="fijo" class="seccion-cliente__nota">El cliente de un pedido registrado no se puede cambiar.</p>
-    <p v-else class="seccion-cliente__nota">
+    <p v-else-if="!esCliente" class="seccion-cliente__nota">
       ¿Cliente nuevo? Solicita su alta en el sistema interno; aquí solo se consultan clientes registrados.
     </p>
   </section>

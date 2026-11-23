@@ -23,6 +23,7 @@ import {
   puedeDisminuir,
 } from '@/modulos/ventas/controladores/usarFormularioPedido'
 import type { RenglonPedido, ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
+import { obtenerRolUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 
 interface Props {
   renglones: RenglonPedido[]
@@ -49,14 +50,24 @@ const emit = defineEmits<{
   (e: 'disminuir', productoId: string): void
 }>()
 
-const columnas: ColumnaTabla[] = [
-  { clave: 'producto', etiqueta: 'Producto' },
-  { clave: 'precio', etiqueta: 'Precio' },
-  { clave: 'disponible', etiqueta: 'Disponible' },
-  { clave: 'cantidad', etiqueta: 'Cantidad' },
-  { clave: 'subtotal', etiqueta: 'Subtotal', alineacion: 'derecha' },
-  { clave: 'acciones', etiqueta: 'Acciones', ocultarEtiqueta: true },
-]
+const esCliente = obtenerRolUsuario() === 'cliente'
+
+const columnas: ColumnaTabla[] = esCliente
+  ? [
+      { clave: 'producto', etiqueta: 'Producto' },
+      { clave: 'precio', etiqueta: 'Precio' },
+      { clave: 'cantidad', etiqueta: 'Cantidad' },
+      { clave: 'subtotal', etiqueta: 'Subtotal', alineacion: 'derecha' },
+      { clave: 'acciones', etiqueta: 'Acciones', ocultarEtiqueta: true },
+    ]
+  : [
+      { clave: 'producto', etiqueta: 'Producto' },
+      { clave: 'precio', etiqueta: 'Precio' },
+      { clave: 'disponible', etiqueta: 'Disponible' },
+      { clave: 'cantidad', etiqueta: 'Cantidad' },
+      { clave: 'subtotal', etiqueta: 'Subtotal', alineacion: 'derecha' },
+      { clave: 'acciones', etiqueta: 'Acciones', ocultarEtiqueta: true },
+    ]
 
 const importePorProducto = computed(
   () => new Map(props.resumen.renglones.map((renglon) => [renglon.productoId, renglon.importe])),
@@ -70,6 +81,7 @@ const anuncio = ref('')
 const idQuitar = (productoId: string) => `${idCampoCantidad(productoId)}-quitar`
 
 function excede(renglon: RenglonPedido): boolean {
+  if (esCliente) return false
   const cantidad = leerCantidad(renglon.cantidadCapturada)
   return cantidad !== null && cantidad > renglon.producto.disponibleKg
 }
@@ -151,7 +163,7 @@ async function quitar(indice: number, renglon: RenglonPedido) {
             <p class="productos__precio">{{ formatearMoneda(renglon.producto.precioKg) }}</p>
             <p class="productos__secundario">por kg</p>
           </td>
-          <td>{{ formatearKg(renglon.producto.disponibleKg) }}</td>
+          <td v-if="!esCliente">{{ formatearKg(renglon.producto.disponibleKg) }}</td>
           <td>
             <div class="cantidad">
               <button
@@ -212,7 +224,7 @@ async function quitar(indice: number, renglon: RenglonPedido) {
           class="productos__mensaje"
           :class="{ 'productos__renglon--excedido': excede(renglon) }"
         >
-          <td colspan="6">
+          <td :colspan="columnas.length">
             <p
               :id="`${idCampoCantidad(renglon.producto.productoId)}-error`"
               class="productos__error"

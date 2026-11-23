@@ -1,9 +1,15 @@
 import { computed, ref, watch } from 'vue'
 
 import {
+  obtenerCatalogoCliente,
   obtenerInventarioActual,
   type ArticuloInventario,
 } from '@/modulos/almacen/servicios/servicioInventario'
+import {
+  obtenerIdUsuarioSesion,
+  obtenerNombreUsuario,
+  obtenerRolUsuario,
+} from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { formatearNumero } from '@/modulos/ventas/controladores/formatosPedido'
 import { ID_SUCURSAL_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { Cliente, SucursalCliente } from '@/modulos/ventas/interfaces/cliente'
@@ -17,6 +23,7 @@ import type {
   ResumenPedido,
 } from '@/modulos/ventas/interfaces/pedido'
 import { obtenerSucursalesActivas } from '@/modulos/ventas/servicios/servicioClientesVentas'
+
 
 // Lo que comparten Nuevo pedido y Editar pedido: mensajes, ids de campos, reglas de cantidad y
 // el estado del formulario (usarFormularioPedido). Cada pantalla pone lo suyo encima:
@@ -88,7 +95,8 @@ export function aProductoVenta(articulo: ArticuloInventario, indice: number): Pr
 /** Sin código de producto la API rechaza el pedido; esos productos no se pueden agregar. */
 export const tieneCodigoProducto = (producto: ProductoVenta) => producto.codigoProducto !== null
 
-export const estaAgotado = (producto: ProductoVenta) => producto.disponibleKg <= 0
+export const estaAgotado = (producto: ProductoVenta) =>
+  obtenerRolUsuario() === 'cliente' ? false : producto.disponibleKg <= 0
 
 const redondear = (valor: number) => Math.round(valor * 100) / 100
 
@@ -112,6 +120,7 @@ export function puedeDisminuir(renglon: RenglonPedido): boolean {
 }
 
 export function puedeAumentar(renglon: RenglonPedido): boolean {
+  if (obtenerRolUsuario() === 'cliente') return true
   const cantidad = leerCantidad(renglon.cantidadCapturada)
   return cantidad === null || cantidad < renglon.producto.disponibleKg
 }
@@ -146,6 +155,18 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
   // Cada consulta lleva un número; si llega la respuesta de una vieja (otro cliente), se descarta.
   let consultaSucursales = 0
 
+  const esCliente = obtenerRolUsuario() === 'cliente'
+  const idClienteSesion = esCliente ? obtenerIdUsuarioSesion() : null
+
+  function crearClienteSesion(): Cliente | null {
+    if (!esCliente || !idClienteSesion) return null
+    return {
+      id: idClienteSesion,
+      nombre: obtenerNombreUsuario() || `Cliente #${idClienteSesion}`,
+      telefono: '',
+    }
+  }
+
   // Formulario
   const cliente = ref<Cliente | null>(null)
   const sucursal = ref<SucursalCliente | null>(null)
@@ -164,7 +185,11 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     cargandoInventario.value = true
     errorInventario.value = false
     try {
-      productosInventario.value = (await obtenerInventarioActual()).map(aProductoVenta)
+      const lista = esCliente ? await obtenerCatalogoCliente() : await obtenerInventarioActual()
+      productosInventario.value = lista.map(aProductoVenta)
+      if (esCliente && cliente.value) {
+        cargarSucursales()
+      }
     } catch {
       productosInventario.value = []
       errorInventario.value = true
@@ -243,7 +268,8 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     if (!renglon || !puedeAumentar(renglon)) return
     const actual = leerCantidad(renglon.cantidadCapturada)
     const siguiente = actual === null || actual < 1 ? 1 : actual + 1
-    renglon.cantidadCapturada = String(redondear(Math.min(siguiente, renglon.producto.disponibleKg)))
+    const nuevoValor = esCliente ? siguiente : Math.min(siguiente, renglon.producto.disponibleKg)
+    renglon.cantidadCapturada = String(redondear(nuevoValor))
   }
 
   function disminuirCantidad(productoId: string) {
@@ -289,12 +315,12 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
   const errores = computed<ErroresPedido>(() => (intentoEnviar.value ? calcularErrores() : SIN_ERRORES))
 
   /** Error de cantidad por producto. El de disponibilidad aparece al instante; el resto, tras intentar enviar. */
-  const erroresCantidad = computed<Record<string, string>>(() => {
+ const erroresCantidad = computed<Record<string, string>>(() => {
     const resultado: Record<string, string> = {}
     for (const renglon of renglones.value) {
       const cantidad = leerCantidad(renglon.cantidadCapturada)
       const id = renglon.producto.productoId
-      if (cantidad !== null && cantidad > renglon.producto.disponibleKg) {
+      if (!esCliente && cantidad !== null && cantidad > renglon.producto.disponibleKg) {
         resultado[id] = mensajeExcedeDisponible(renglon.producto)
       } else if (intentoEnviar.value && (cantidad === null || cantidad <= 0)) {
         resultado[id] = MENSAJES.cantidadInvalida
@@ -422,7 +448,7 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
 
   /** Deja el formulario vacío (Nuevo pedido, después de registrar; su watch de cliente limpia la sucursal). */
   function reiniciar() {
-    cliente.value = null
+    cliente.value = crearClienteSesion()
     renglones.value = []
     modalidad.value = null
     usarDireccionRegistrada.value = false
@@ -430,8 +456,8 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     referencias.value = ''
     observaciones.value = ''
     intentoEnviar.value = false
+    if (esCliente && cliente.value) cargarSucursales()
   }
-
   return {
     productosInventario,
     cargandoInventario,
