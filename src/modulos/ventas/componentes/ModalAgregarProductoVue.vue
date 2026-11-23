@@ -10,6 +10,7 @@ import ModalVue from '@/componentes/ModalVue.vue'
 import { formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
 import { estaAgotado, tieneCodigoProducto } from '@/modulos/ventas/controladores/usarFormularioPedido'
 import type { ProductoVenta } from '@/modulos/ventas/interfaces/pedido'
+import { obtenerRolUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 
 interface Props {
   mostrar: boolean
@@ -24,6 +25,8 @@ const emit = defineEmits<{
   (e: 'cerrar'): void
   (e: 'agregar', producto: ProductoVenta): void
 }>()
+
+const esCliente = obtenerRolUsuario() === 'cliente'
 
 const ID_BUSQUEDA = 'pedido-buscar-producto'
 const busqueda = ref('')
@@ -91,15 +94,15 @@ async function agregar(producto: ProductoVenta) {
           <p class="productos-modal__nombre">{{ producto.nombre }}</p>
           <p class="productos-modal__detalle">{{ producto.presentacion }}</p>
           <p class="productos-modal__detalle">
-            <strong>{{ formatearMoneda(producto.precioKg) }}</strong> por kg ·
-            {{ formatearKg(producto.disponibleKg) }} disponibles
+            <strong>{{ formatearMoneda(producto.precioKg) }}</strong> por kg
+            <template v-if="!esCliente"> · {{ formatearKg(producto.disponibleKg) }} disponibles</template>
           </p>
           <p v-if="!tieneCodigoProducto(producto)" class="productos-modal__detalle">
             Sin código de producto en el inventario.
           </p>
         </div>
 
-        <ChipEstadoVue v-bind="chip(producto)" />
+        <ChipEstadoVue v-if="!esCliente" v-bind="chip(producto)" />
 
         <div class="productos-modal__accion">
           <BotonVue

@@ -74,6 +74,11 @@ export function obtenerRolUsuario(): string {
   return (localStorage.getItem('rolUsuario') || 'administrador').toLowerCase()
 }
 
+export function esRolReportes(): boolean {
+  const rol = obtenerRolUsuario()
+  return rol === 'reporte' || rol === 'reportes'
+}
+
 export function obtenerIdUsuarioSesion(): number | null {
   const token = obtenerToken()
   if (!token) return null
@@ -81,7 +86,8 @@ export function obtenerIdUsuarioSesion(): number | null {
     const partePayload = token.split('.')[1]
     if (!partePayload) return null
     const base64 = partePayload.replace(/-/g, '+').replace(/_/g, '/')
-    const payload = JSON.parse(atob(base64)) as { userId?: number; sub?: string }
+    const relleno = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const payload = JSON.parse(atob(relleno)) as { userId?: number; sub?: string }
     const id = Number(payload.userId ?? payload.sub)
     return Number.isSafeInteger(id) && id > 0 ? id : null
   } catch {
@@ -96,7 +102,7 @@ export function obtenerMenuNavegacion(): ItemNavegacion[] {
     { etiqueta: 'Inicio', icono: 'inicio', ruta: '/panel' },
     { etiqueta: 'Pedidos', icono: 'pedidos', ruta: '/pedidos' },
     { etiqueta: 'Clientes', icono: 'clientes', ruta: '/clientes' },
-    { etiqueta: 'Reportes', icono: 'reportes' },
+    { etiqueta: 'Reportes', icono: 'reportes', ruta: '/reportes' },
     { etiqueta: 'Usuarios', icono: 'usuario', ruta: '/usuarios' }
   ]
 
@@ -109,7 +115,7 @@ export function obtenerMenuNavegacion(): ItemNavegacion[] {
   }
 
   if (rol === 'reporte' || rol === 'reportes') {
-    return menuCompleto.filter(item => ['Inicio', 'Reportes'].includes(item.etiqueta))
+    return menuCompleto.filter(item => ['Reportes'].includes(item.etiqueta))
   }
 
   // Si es administrador, retorna todo
