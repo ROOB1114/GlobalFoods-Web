@@ -1,5 +1,8 @@
 <script setup lang="ts">
-// Columna derecha de Nuevo pedido: resumen en vivo, total y acciones.
+// Columna derecha de Nuevo pedido y Editar pedido: resumen en vivo, total y acciones.
+// En Editar pedido (`folioEdicion`) muestra el folio y el botón dice "Guardar cambios".
+
+import { computed } from 'vue'
 
 import BotonVue from '@/componentes/BotonVue.vue'
 import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
@@ -17,18 +20,40 @@ import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 interface Props {
   resumen: ResumenPedido
   enviando?: boolean
+  /** Folio del pedido que se edita, p. ej. "#12"; vacío en un pedido nuevo. */
+  folioEdicion?: string
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   enviando: false,
+  folioEdicion: '',
 })
 
 const emit = defineEmits<{
+  /** Registrar el pedido o, en edición, guardar los cambios. */
   (e: 'registrar'): void
   (e: 'cancelar'): void
 }>()
 
 const SIN_DATO = '—'
+
+const TEXTOS = {
+  nuevo: {
+    estado: 'Estado inicial',
+    folio: 'Se asigna al registrar',
+    accion: 'Registrar pedido',
+    nota: 'Antes de registrar se mostrará el resumen para confirmar el pedido.',
+  },
+  edicion: {
+    estado: 'Estado',
+    accion: 'Guardar cambios',
+    nota: 'Antes de guardar se mostrará el resumen para confirmar los cambios.',
+  },
+}
+
+const textos = computed(() =>
+  props.folioEdicion ? { ...TEXTOS.edicion, folio: props.folioEdicion } : TEXTOS.nuevo,
+)
 </script>
 
 <template>
@@ -37,12 +62,12 @@ const SIN_DATO = '—'
 
     <dl class="resumen__datos">
       <div class="resumen__dato">
-        <dt>Estado inicial</dt>
+        <dt>{{ textos.estado }}</dt>
         <dd><ChipEstadoVue estado="pendiente" /></dd>
       </div>
       <div class="resumen__dato">
         <dt>Folio</dt>
-        <dd>Se asigna al registrar</dd>
+        <dd>{{ textos.folio }}</dd>
       </div>
     </dl>
 
@@ -92,12 +117,12 @@ const SIN_DATO = '—'
     <div class="resumen__acciones">
       <BotonVue variante="exito" :deshabilitado="enviando" @click="emit('registrar')">
         <IconoVue nombre="check" :tamano="16" />
-        Registrar pedido
+        {{ textos.accion }}
       </BotonVue>
       <BotonVue variante="secundario" :deshabilitado="enviando" @click="emit('cancelar')">Cancelar</BotonVue>
     </div>
 
-    <p class="resumen__nota">Antes de registrar se mostrará el resumen para confirmar el pedido.</p>
+    <p class="resumen__nota">{{ textos.nota }}</p>
   </aside>
 </template>
 

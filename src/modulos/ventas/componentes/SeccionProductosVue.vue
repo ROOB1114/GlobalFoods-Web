@@ -21,7 +21,7 @@ import {
   limpiarCantidad,
   puedeAumentar,
   puedeDisminuir,
-} from '@/modulos/ventas/controladores/usarNuevoPedido'
+} from '@/modulos/ventas/controladores/usarFormularioPedido'
 import type { RenglonPedido, ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {

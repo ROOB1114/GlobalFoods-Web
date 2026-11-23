@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // Confirmación del pedido antes de registrarlo y, si sale bien, el folio asignado.
 // Cerrar (Escape, velo o X) equivale a "Corregir" al confirmar y a "Registrar otro pedido" al terminar.
+// En Editar pedido (`folioEdicion`) confirma que se guardan los cambios; ahí no hay estado de
+// éxito: la vista regresa al detalle.
 
 import { computed, nextTick, watch } from 'vue'
 
@@ -13,7 +15,7 @@ import {
   formatearNumero,
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
-import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarNuevoPedido'
+import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarFormularioPedido'
 import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
 
@@ -25,12 +27,16 @@ interface Props {
   /** Folio asignado; solo en el estado de éxito. */
   folio?: string
   /** Botón del éxito que regresa a la pantalla de origen, p. ej. "Ir al inicio" o "Ir a Pedidos". */
-  textoRegresar: string
+  textoRegresar?: string
+  /** Folio del pedido que se edita, p. ej. "#12"; vacío en un pedido nuevo. */
+  folioEdicion?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   enviando: false,
   folio: '',
+  textoRegresar: '',
+  folioEdicion: '',
 })
 
 const emit = defineEmits<{
@@ -45,6 +51,24 @@ const ID_REGISTRAR_OTRO = 'pedido-registrar-otro'
 
 const totalTexto = computed(() => formatearMoneda(props.resumen.total))
 const modalidad = computed(() => (props.resumen.modalidad ? MODALIDADES[props.resumen.modalidad] : null))
+
+const TEXTOS = {
+  nuevo: {
+    titulo: 'Confirmar pedido',
+    pregunta: (total: string) => `¿Confirma el registro del pedido por ${total}?`,
+    confirmar: 'Confirmar',
+    enviando: 'Registrando…',
+  },
+  edicion: {
+    titulo: 'Guardar cambios',
+    pregunta: (total: string, folio: string) => `¿Guardar los cambios del pedido ${folio} por ${total}?`,
+    confirmar: 'Guardar cambios',
+    enviando: 'Guardando…',
+  },
+}
+
+const textos = computed(() => (props.folioEdicion ? TEXTOS.edicion : TEXTOS.nuevo))
+const pregunta = computed(() => textos.value.pregunta(totalTexto.value, props.folioEdicion))
 
 function alCerrar() {
   if (props.estado === 'exito') emit('registrarOtro')
@@ -65,7 +89,7 @@ watch(
 <template>
   <ModalVue
     :mostrar="mostrar"
-    :titulo="estado === 'exito' ? 'Pedido registrado' : 'Confirmar pedido'"
+    :titulo="estado === 'exito' ? 'Pedido registrado' : textos.titulo"
     :cerrable="!enviando"
     :ancho-maximo="520"
     :enfocar-al-cerrar="estado === 'exito' ? IDS_CAMPOS.cliente : undefined"
@@ -125,7 +149,7 @@ watch(
         <strong>{{ totalTexto }}</strong>
       </div>
 
-      <p class="confirmacion__pregunta">¿Confirma el registro del pedido por {{ totalTexto }}?</p>
+      <p class="confirmacion__pregunta">{{ pregunta }}</p>
     </div>
 
     <div v-else class="exito">
@@ -140,7 +164,7 @@ watch(
         <BotonVue variante="secundario" :deshabilitado="enviando" @click="emit('corregir')">Corregir</BotonVue>
         <BotonVue variante="exito" :cargando="enviando" data-autofocus @click="emit('confirmar')">
           <IconoVue v-if="!enviando" nombre="check" :tamano="16" />
-          {{ enviando ? 'Registrando…' : 'Confirmar' }}
+          {{ enviando ? textos.enviando : textos.confirmar }}
         </BotonVue>
       </template>
       <template v-else>

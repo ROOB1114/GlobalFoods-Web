@@ -1,11 +1,14 @@
 export type ModalidadEntrega = 'domicilio' | 'recoleccion'
 
-/** Producto que se puede vender, armado a partir del inventario actual. */
+/**
+ * Producto que se puede vender, armado a partir del inventario actual. Al editar un pedido, sus
+ * líneas también se arman así, con el precio guardado (ver usarEditarPedido).
+ */
 export interface ProductoVenta {
   /** Identificador del producto en la captura: String(codigoProducto). */
   productoId: string
   /**
-   * Código del producto (CodigoProducto en POST /api/pedidos).
+   * Código del producto (CodigoProducto en POST y PUT /api/pedidos).
    * null si el inventario no lo trae como entero positivo: el producto se muestra como no
    * disponible y no se puede agregar.
    */
@@ -35,15 +38,19 @@ export interface ProductoRegistroPedido {
   talla: string
   cantidadKg: number
   /**
-   * Precio por kg que vio la asesora al capturar. La API lo guarda tal cual; lo ideal es que
-   * lo revalide con sus propios datos y rechace el pedido si el precio cambió.
+   * Precio por kg que vio la asesora al capturar; al editar, el guardado si la línea ya venía en
+   * el pedido. La API lo guarda tal cual; lo ideal es que lo revalide con sus propios datos y
+   * rechace el pedido si el precio cambió.
    */
   precioKg: number
   /** cantidadKg × precioKg, redondeado a centavos (el importe del renglón en el resumen). */
   importe: number
 }
 
-/** Datos del pedido capturado. servicioPedidos los convierte al cuerpo de POST /api/pedidos. */
+/**
+ * Datos del pedido capturado. servicioPedidos los convierte al cuerpo de POST /api/pedidos (nuevo)
+ * o de PUT /api/pedidos/:id (edición; ahí el cliente no cambia).
+ */
 export interface DatosRegistroPedido {
   clienteId: number
   /**
@@ -82,8 +89,8 @@ export interface Pedido {
   /** Fecha de registro, aaaa-mm-dd (la API no guarda la hora); vacía si la API trae una fecha no válida. */
   fechaRegistro: string
   /**
-   * Fecha de entrega, aaaa-mm-dd. La llena el sistema interno al registrar el pago; null mientras
-   * no la tiene (la API no la trae, viene null o 0).
+   * Fecha de entrega, aaaa-mm-dd (FechaEntrega en la API). Se llena al registrar el pago, en la
+   * web o en el sistema interno; null mientras no la tiene (viene null, 0 o no viene).
    */
   fechaEntrega: string | null
   totalKg: number
@@ -91,8 +98,8 @@ export interface Pedido {
   /** Ver controladores/estadosPedido.ts. */
   estatus: number
   /**
-   * 0 pendiente, 1 efectivo, 2 crédito o transferencia (ver controladores/metodosPago.ts); lo cambia
-   * el sistema interno al cobrar. null si la API no lo trae.
+   * 0 pendiente, 1 efectivo, 2 crédito o transferencia (ver controladores/metodosPago.ts); cambia
+   * al registrar el pago, en la web o en el sistema interno. null si la API no lo trae.
    */
   metodoPago: number | null
   /** Texto tal como viene; leerObservaciones() separa los datos de entrega de las notas. */

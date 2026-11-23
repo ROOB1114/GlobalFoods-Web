@@ -7,8 +7,8 @@ const ESPERA_MINIMA_AL_VOLVER_MS = 15_000
 /**
  * Llama a `actualizar` cada minuto mientras la pantalla está abierta y la pestaña del navegador
  * está a la vista, y también al regresar a la pestaña. Así se reflejan sin recargar los cambios
- * que se hacen en el sistema interno: almacén marca Surtido y, al cobrar, el pedido pasa a
- * Entregado con su método de pago.
+ * que se hacen en el sistema interno (almacén marca Surtido y, si ahí se cobra, el pedido pasa a
+ * Entregado con su método de pago) o en otra sesión de la web.
  */
 export function usarActualizacionPeriodica(actualizar: () => void, intervaloMs = INTERVALO_ACTUALIZACION_MS) {
   let temporizador: ReturnType<typeof setInterval> | undefined

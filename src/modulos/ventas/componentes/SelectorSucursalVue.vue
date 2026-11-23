@@ -7,7 +7,7 @@ import { computed } from 'vue'
 
 import BotonVue from '@/componentes/BotonVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
-import { IDS_CAMPOS, MENSAJES } from '@/modulos/ventas/controladores/usarNuevoPedido'
+import { IDS_CAMPOS, MENSAJES } from '@/modulos/ventas/controladores/usarFormularioPedido'
 import type { SucursalCliente } from '@/modulos/ventas/interfaces/cliente'
 
 interface Props {
