@@ -9,6 +9,7 @@ export interface ClienteAPI {
   Nombre: string
   Telefono: string
   Estatus: number
+  UsuarioTelegram?: string | null
 }
 
 function getHeaders() {
@@ -58,6 +59,7 @@ export async function cambiarEstatusClienteAPI(cliente: ClienteAPI, estatus: 0 |
     contrasena: cliente.Contrasena,
     nombre: cliente.Nombre,
     telefono: cliente.Telefono,
+    usuarioTelegram: cliente.UsuarioTelegram ?? null,
     estatus,
   } as unknown as Partial<ClienteAPI>)
 }
@@ -81,13 +83,15 @@ export async function obtenerClientePorIdAPI(id: number): Promise<ClienteAPI> {
   return res.json()
 }
 
-// AQUÍ ESTABA EL ERROR 404: La URL correcta es /api/sucursales-clientes?idCliente=
 export async function obtenerSucursalesClienteAPI(idCliente: number): Promise<any[]> {
   const token = obtenerToken()
-  const res = await fetch(`${URL_API.replace(/\/$/, '')}/api/sucursales-clientes?idCliente=${idCliente}`, {
-    headers: { Authorization: `Bearer ${token}` }
+  const res = await fetch(`${URL_API.replace(/\/$/, '')}/api/sucursales-clientes`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Id-Cliente': String(idCliente),
+    },
   })
-  if (!res.ok) return [] 
+  if (!res.ok) return []
   return res.json()
 }
 
@@ -134,8 +138,11 @@ export async function actualizarSucursalClienteAPI(id: number, datos: any): Prom
 export async function eliminarSucursalClienteAPI(id: number): Promise<boolean> {
   const res = await fetch(`${URL_API.replace(/\/$/, '')}/api/sucursales-clientes/${id}`, {
     method: 'DELETE',
-    headers: getHeaders() // Usamos getHeaders()
+    headers: getHeaders()
   })
-  if (!res.ok) throw new Error('Error al eliminar sucursal')
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null)
+    throw new Error(errorData?.error || 'Error al eliminar sucursal')
+  }
   return true
 }

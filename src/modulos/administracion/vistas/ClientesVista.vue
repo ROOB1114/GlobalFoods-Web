@@ -37,6 +37,7 @@ const columnasClientes: ColumnaTabla[] = [
   { clave: 'nombre', etiqueta: 'NOMBRE' },
   { clave: 'usuario', etiqueta: 'USUARIO' },
   { clave: 'celular', etiqueta: 'CELULAR' },
+  { clave: 'telegram', etiqueta: 'TELEGRAM' },
   { clave: 'contrasena', etiqueta: 'CONTRASEÑA' },
   { clave: 'estado', etiqueta: 'ESTADO' },
   { clave: 'cambios', etiqueta: 'CAMBIOS', alineacion: 'centro' },
@@ -82,14 +83,20 @@ const solicitarCambioEstatus = (cli: ClienteAPI) => {
   mostrarModalConfirmacion.value = true
 }
 
-const guardarCliente = async (datos: { nombre: string; celular: string; usuario: string; contrasena: string }) => {
+const guardarCliente = async (datos: {
+  nombre: string
+  celular: string
+  usuario: string
+  usuarioTelegram: string
+  contrasena: string
+}) => {
   try {
     const payload = {
       usuario: datos.usuario,
       contrasena: datos.contrasena,
       nombre: datos.nombre,
-      telefono: datos.celular, 
-      // Al editar se conserva el estatus; antes se mandaba siempre 1 y reactivaba al cliente.
+      telefono: datos.celular,
+      usuarioTelegram: datos.usuarioTelegram || null,
       estatus: clienteSeleccionado.value?.Estatus ?? 1,
     }
 
@@ -100,7 +107,7 @@ const guardarCliente = async (datos: { nombre: string; celular: string; usuario:
     }
 
     mostrarModal.value = false
-    await cargarDatosClientes() 
+    await cargarDatosClientes()
   } catch (err: any) {
     alert(err.message || 'Error al guardar el cliente')
   }
@@ -167,6 +174,7 @@ const confirmarCambioEstatus = async () => {
             <td class="panel__texto-nombre">{{ cliente.Nombre }}</td>
             <td class="panel__texto-fuerte">{{ cliente.Usuario }}</td>
             <td class="panel__texto-fuerte">{{ cliente.Telefono }}</td>
+            <td class="panel__texto-fuerte">{{ cliente.UsuarioTelegram || 'N/A' }}</td>
 
             <!-- Columna de Contraseña con el ojito -->
             <td>

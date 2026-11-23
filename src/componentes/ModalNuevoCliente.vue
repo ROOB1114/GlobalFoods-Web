@@ -7,7 +7,7 @@ import type { ClienteAPI } from '@/modulos/administracion/servicios/servicioClie
 
 interface Props {
   mostrar: boolean
-  clienteEditar?: ClienteAPI | null 
+  clienteEditar?: ClienteAPI | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -17,41 +17,58 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'cerrar'): void
-  (e: 'guardar', datos: { nombre: string; celular: string; usuario: string; contrasena: string }): void
+  (
+    e: 'guardar',
+    datos: {
+      nombre: string
+      celular: string
+      usuario: string
+      usuarioTelegram: string
+      contrasena: string
+    }
+  ): void
 }>()
 
 const nombre = ref('')
 const celular = ref('')
 const usuario = ref('')
+const usuarioTelegram = ref('')
 const contrasena = ref('')
-const confirmacionDatos = ref(false) // Cambiamos el nombre de la variable
+const confirmacionDatos = ref(false)
 
 const handleGuardar = () => {
   emit('guardar', {
     nombre: nombre.value,
     celular: celular.value,
     usuario: usuario.value,
+    usuarioTelegram: usuarioTelegram.value.trim(),
     contrasena: contrasena.value,
   })
   emit('cerrar')
 }
 
-watch(() => props.clienteEditar, (nuevoCliente) => {
-  if (nuevoCliente) {
-    // Llenamos todos los campos, incluyendo la contraseña
-    nombre.value = nuevoCliente.Nombre || ''
-    celular.value = nuevoCliente.Telefono || ''
-    usuario.value = nuevoCliente.Usuario || ''
-    contrasena.value = nuevoCliente.Contrasena || '' 
-    confirmacionDatos.value = false // Desmarcamos el check por seguridad al abrir
-  } else {
-    nombre.value = ''
-    celular.value = ''
-    usuario.value = ''
-    contrasena.value = ''
-    confirmacionDatos.value = false
-  }
-}, { immediate: true })
+watch(
+  [() => props.clienteEditar, () => props.mostrar],
+  ([nuevoCliente, estaVisible]) => {
+    if (!estaVisible) return
+    if (nuevoCliente) {
+      nombre.value = nuevoCliente.Nombre || ''
+      celular.value = nuevoCliente.Telefono || ''
+      usuario.value = nuevoCliente.Usuario || ''
+      usuarioTelegram.value = nuevoCliente.UsuarioTelegram || ''
+      contrasena.value = nuevoCliente.Contrasena || ''
+      confirmacionDatos.value = false
+    } else {
+      nombre.value = ''
+      celular.value = ''
+      usuario.value = ''
+      usuarioTelegram.value = ''
+      contrasena.value = ''
+      confirmacionDatos.value = false
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -90,15 +107,22 @@ watch(() => props.clienteEditar, (nuevoCliente) => {
             />
 
             <CampoTextoVue
+              id="cliente-telegram"
+              v-model="usuarioTelegram"
+              etiqueta="Usuario de Telegram"
+              tipo="text"
+              marcador="Usuario de Telegram (opcional)"
+            />
+
+            <CampoTextoVue
               id="cliente-contrasena"
               v-model="contrasena"
               etiqueta="Contraseña"
-              tipo="text" 
+              tipo="text"
               icono="candado"
               marcador="********"
             />
 
-            <!-- Nuevo Checkbox de confirmación -->
             <label class="modal__confirmacion">
               <input type="checkbox" v-model="confirmacionDatos" class="modal__confirmacion-input" />
               <span class="modal__confirmacion-texto">Confirmo que los datos ingresados son correctos</span>

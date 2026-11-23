@@ -1,36 +1,44 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BotonVue from '@/componentes/BotonVue.vue'
+import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import LayoutPanelVue from '@/componentes/LayoutPanelVue.vue'
-import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
-import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
-import ModalNuevaSucursal from '@/componentes/ModalNuevaSucursal.vue'
 import ModalConfirmacion from '@/componentes/ModalConfirmacion.vue'
-// Importamos el modal del cliente
+import ModalNuevaSucursal from '@/componentes/ModalNuevaSucursal.vue'
 import ModalNuevoCliente from '@/componentes/ModalNuevoCliente.vue'
-import { obtenerNombreUsuario, obtenerMenuNavegacion } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
-import { 
-  obtenerClientePorIdAPI,
-  actualizarClienteAPI, // Agregamos la función para actualizar al cliente
-  obtenerSucursalesClienteAPI, 
-  obtenerPedidosClienteAPI,
-  crearSucursalClienteAPI,
+import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
+import {
+  actualizarClienteAPI,
   actualizarSucursalClienteAPI,
+  crearSucursalClienteAPI,
   eliminarSucursalClienteAPI,
-  type ClienteAPI
+  obtenerClientePorIdAPI,
+  obtenerSucursalesClienteAPI,
+  type ClienteAPI,
 } from '@/modulos/administracion/servicios/servicioClientes'
+import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import { estadoDePedido } from '@/modulos/ventas/controladores/estadosPedido'
+import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
+import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
+import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+import { esSucursalRecoleccion, modalidadDePedido } from '@/modulos/ventas/controladores/puntoRecoleccion'
+import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
+import type { Pedido } from '@/modulos/ventas/interfaces/pedido'
+import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
 
 const route = useRoute()
+const enrutador = useRouter()
 const clienteId = Number(route.params.id)
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
+const SIN_DATO = '—'
 
 const cliente = ref<ClienteAPI | null>(null)
 const sucursales = ref<any[]>([])
-const pedidos = ref<any[]>([])
+const pedidos = ref<Pedido[]>([])
 const cargando = ref(true)
 const errorCarga = ref('')
 
@@ -53,28 +61,38 @@ const columnasSucursales: ColumnaTabla[] = [
 ]
 
 const columnasPedidos: ColumnaTabla[] = [
-  { clave: 'id', etiqueta: 'ID PEDIDO' },
-  { clave: 'sucursal', etiqueta: 'SUCURSAL' },
-  { clave: 'fecha', etiqueta: 'FECHA' },
-  { clave: 'estado', etiqueta: 'ESTADO' },
-  { clave: 'total', etiqueta: 'TOTAL', alineacion: 'derecha' },
+  { clave: 'folio', etiqueta: 'Folio' },
+  { clave: 'sucursal', etiqueta: 'Sucursal' },
+  { clave: 'registrado', etiqueta: 'Registrado' },
+  { clave: 'entrega', etiqueta: 'Entrega' },
+  { clave: 'modalidad', etiqueta: 'Modalidad' },
+  { clave: 'estado', etiqueta: 'Estado' },
+  { clave: 'metodoPago', etiqueta: 'Método de pago' },
+  { clave: 'total', etiqueta: 'Total', alineacion: 'derecha' },
 ]
 
-const formatoPrecio = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
-
-const formatearFechaNumero = (fechaNum: number) => {
-  if (!fechaNum) return 'N/A'
-  const fechaStr = String(fechaNum)
-  if (fechaStr.length !== 8) return fechaStr
-  const año = fechaStr.substring(0, 4)
-  const mes = fechaStr.substring(4, 6)
-  const dia = fechaStr.substring(6, 8)
-  return `${dia}/${mes}/${año}`
+const obtenerNombreSucursal = (idSucursal: number) => {
+  if (esSucursalRecoleccion(idSucursal)) return MODALIDADES.recoleccion.titulo
+  const sucursal = sucursales.value.find(s => s.Id === idSucursal)
+  return sucursal ? `Sucursal ${sucursal.NombreSucursal}` : `Sucursal #${idSucursal}`
 }
 
-const obtenerNombreSucursal = (idSucursal: number) => {
-  const sucursal = sucursales.value.find(s => s.Id === idSucursal)
-  return sucursal ? sucursal.NombreSucursal : `Sucursal #${idSucursal}`
+const filasPedidos = computed(() =>
+  pedidos.value.map((ped) => ({
+    id: ped.id,
+    sucursal: obtenerNombreSucursal(ped.idSucursal),
+    registrado: ped.fechaRegistro,
+    fechaEntrega: ped.fechaEntrega,
+    modalidad: modalidadDePedido(ped.idSucursal, leerObservaciones(ped.observaciones).modalidad),
+    estado: estadoDePedido(ped.estatus),
+    metodoPago: textoMetodoPago(ped.metodoPago),
+    total: ped.total,
+    totalKg: ped.totalKg,
+  })),
+)
+
+const abrirDetallePedido = (id: number) => {
+  enrutador.push({ name: 'detalle-pedido', params: { id } })
 }
 
 const cargarDatos = async () => {
@@ -86,15 +104,21 @@ const cargarDatos = async () => {
   cargando.value = true
   errorCarga.value = ''
   try {
-    const [datosCliente, datosSucursales, datosPedidos] = await Promise.all([
+    const [datosCliente, datosSucursales, todosLosPedidos] = await Promise.all([
       obtenerClientePorIdAPI(clienteId),
       obtenerSucursalesClienteAPI(clienteId),
-      obtenerPedidosClienteAPI(clienteId)
+      obtenerPedidos(),
     ])
     cliente.value = datosCliente
     sucursales.value = datosSucursales
-    pedidos.value = datosPedidos
+    pedidos.value = todosLosPedidos
+      .filter((pedido) => pedido.idCliente === clienteId)
+      .sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro) || b.id - a.id)
   } catch (err: any) {
+    if (err instanceof ErrorPedidos && err.motivo === 'sesion') {
+      salirPorSesionVencida(enrutador)
+      return
+    }
     errorCarga.value = err.message || 'Error al cargar los datos del cliente.'
   } finally {
     cargando.value = false
@@ -108,20 +132,26 @@ const abrirModalEditarCliente = () => {
   mostrarModalCliente.value = true
 }
 
-const guardarCliente = async (datos: { nombre: string; celular: string; usuario: string; contrasena: string }) => {
+const guardarCliente = async (datos: {
+  nombre: string
+  celular: string
+  usuario: string
+  usuarioTelegram: string
+  contrasena: string
+}) => {
   try {
     const payload = {
       usuario: datos.usuario,
       contrasena: datos.contrasena,
       nombre: datos.nombre,
       telefono: datos.celular,
-      estatus: cliente.value?.Estatus ?? 1
+      usuarioTelegram: datos.usuarioTelegram || null,
+      estatus: cliente.value?.Estatus ?? 1,
     }
-    
-    // Usamos "as any" para evitar el error de TypeScript y mandar las minúsculas al backend
+
     await actualizarClienteAPI(clienteId, payload as any)
     mostrarModalCliente.value = false
-    await cargarDatos() 
+    await cargarDatos()
   } catch (err: any) {
     alert(err.message || 'Error al guardar el cliente')
   }
@@ -150,7 +180,7 @@ const guardarSucursal = async (datos: { nombreSucursal: string; direccion: strin
       NombreSucursal: datos.nombreSucursal,
       Direccion: datos.direccion,
       Telefono: datos.telefono,
-      Estatus: 1 
+      Estatus: 1,
     }
 
     if (sucursalSeleccionada.value) {
@@ -159,7 +189,7 @@ const guardarSucursal = async (datos: { nombreSucursal: string; direccion: strin
       await crearSucursalClienteAPI(payload)
     }
     mostrarModalSucursal.value = false
-    await cargarDatos() 
+    await cargarDatos()
   } catch (err: any) {
     alert(err.message || 'Error al guardar la sucursal')
   }
@@ -208,10 +238,9 @@ const confirmarEliminacionSucursal = async () => {
           <div class="tarjeta-cliente__encabezado">
             <h2 class="tarjeta-cliente__nombre">{{ cliente.Nombre }}</h2>
             <div class="tarjeta-cliente__acciones">
-              <!-- Se agregó el evento click aquí -->
-              <button 
-                type="button" 
-                class="btn-accion btn-accion--editar" 
+              <button
+                type="button"
+                class="btn-accion btn-accion--editar"
                 aria-label="Editar cliente"
                 @click="abrirModalEditarCliente"
               >
@@ -221,12 +250,25 @@ const confirmarEliminacionSucursal = async () => {
           </div>
           <div class="tarjeta-cliente__tabla-wrap">
             <table class="tarjeta-cliente__tabla">
-              <thead><tr><th>USUARIO</th><th>TELÉFONO</th><th>ESTADO</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>USUARIO</th>
+                  <th>TELÉFONO</th>
+                  <th>TELEGRAM</th>
+                  <th>ESTADO</th>
+                </tr>
+              </thead>
               <tbody>
                 <tr>
                   <td class="panel__texto-fuerte">{{ cliente.Usuario }}</td>
                   <td class="panel__texto-fuerte">{{ cliente.Telefono || 'N/A' }}</td>
-                  <td><ChipEstadoVue :estado="cliente.Estatus === 1 ? 'entregado' : 'en_preparacion'" :etiqueta="cliente.Estatus === 1 ? 'Activo' : 'Inactivo'" /></td>
+                  <td class="panel__texto-fuerte">{{ cliente.UsuarioTelegram || 'N/A' }}</td>
+                  <td>
+                    <ChipEstadoVue
+                      :estado="cliente.Estatus === 1 ? 'entregado' : 'en_preparacion'"
+                      :etiqueta="cliente.Estatus === 1 ? 'Activo' : 'Inactivo'"
+                    />
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -242,29 +284,31 @@ const confirmarEliminacionSucursal = async () => {
             </BotonVue>
           </EncabezadoSeccionVue>
 
-          <TablaVue v-if="sucursales.length > 0" :columnas="columnasSucursales">
-            <tr v-for="suc in sucursales" :key="suc.Id">
-              <td class="panel__texto-nombre">{{ suc.NombreSucursal }}</td>
-              <td>{{ suc.Direccion }}</td>
-              <td class="panel__texto-fuerte">{{ suc.Telefono || 'N/A' }}</td>
-              <td>
-                <ChipEstadoVue 
-                  :estado="suc.Estatus === 1 ? 'entregado' : 'en_preparacion'" 
-                  :etiqueta="suc.Estatus === 1 ? 'Activa' : 'Inactiva'" 
-                />
-              </td>
-              <td class="tabla__celda--centro">
-                <div class="panel__acciones-fila">
-                  <button type="button" class="btn-accion btn-accion--editar" @click="abrirModalEditarSucursal(suc)">
-                    <IconoVue nombre="lapiz" :tamano="16" />
-                  </button>
-                  <button type="button" class="btn-accion btn-accion--eliminar" @click="solicitarEliminarSucursal(suc)">
-                    <IconoVue nombre="basura" :tamano="16" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </TablaVue>
+          <div v-if="sucursales.length > 0" class="tabla-scroll tabla-scroll--sucursales">
+            <TablaVue :columnas="columnasSucursales">
+              <tr v-for="suc in sucursales" :key="suc.Id">
+                <td class="panel__texto-nombre">{{ suc.NombreSucursal }}</td>
+                <td>{{ suc.Direccion }}</td>
+                <td class="panel__texto-fuerte">{{ suc.Telefono || 'N/A' }}</td>
+                <td>
+                  <ChipEstadoVue
+                    :estado="suc.Estatus === 1 ? 'entregado' : 'en_preparacion'"
+                    :etiqueta="suc.Estatus === 1 ? 'Activa' : 'Inactiva'"
+                  />
+                </td>
+                <td class="tabla__celda--centro">
+                  <div class="panel__acciones-fila">
+                    <button type="button" class="btn-accion btn-accion--editar" @click="abrirModalEditarSucursal(suc)">
+                      <IconoVue nombre="lapiz" :tamano="16" />
+                    </button>
+                    <button type="button" class="btn-accion btn-accion--eliminar" @click="solicitarEliminarSucursal(suc)">
+                      <IconoVue nombre="basura" :tamano="16" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </TablaVue>
+          </div>
           <div v-else class="panel__estado-vacio">
             Este cliente no tiene sucursales registradas.
           </div>
@@ -273,18 +317,44 @@ const confirmarEliminacionSucursal = async () => {
         <!-- SECCIÓN PEDIDOS -->
         <section>
           <EncabezadoSeccionVue titulo="Historial de Pedidos" icono="reloj" />
-          <TablaVue v-if="pedidos.length > 0" :columnas="columnasPedidos">
-            <tr v-for="ped in pedidos" :key="ped.Id">
-              <td class="panel__id">#{{ ped.Id }}</td>
-              <td class="panel__texto-nombre">{{ obtenerNombreSucursal(ped.IdSucursal) }}</td>
-              <td>{{ formatearFechaNumero(ped.Fecha) }}</td>
-              <td><ChipEstadoVue :estado="ped.Estatus === 1 ? 'entregado' : 'pendiente'" :etiqueta="ped.Estatus === 1 ? 'Completado' : 'Pendiente'" /></td>
-              <td class="tabla__celda--derecha">
-                <p class="panel__total">{{ formatoPrecio.format(ped.Total) }}</p>
-                <p class="panel__detalle">{{ ped.TotalKG }} KG</p>
-              </td>
-            </tr>
-          </TablaVue>
+          <div v-if="filasPedidos.length > 0" class="tabla-scroll tabla-scroll--pedidos">
+            <TablaVue :columnas="columnasPedidos">
+              <tr
+                v-for="fila in filasPedidos"
+                :key="fila.id"
+                class="fila-clicable"
+                @click="abrirDetallePedido(fila.id)"
+              >
+                <td class="panel__id">
+                  <RouterLink
+                    :to="{ name: 'detalle-pedido', params: { id: fila.id } }"
+                    class="panel__folio"
+                    @click.stop
+                  >
+                    #{{ fila.id }}
+                  </RouterLink>
+                </td>
+                <td class="panel__texto-nombre">{{ fila.sucursal }}</td>
+                <td>{{ formatearFecha(fila.registrado) || SIN_DATO }}</td>
+                <td>{{ fila.fechaEntrega ? formatearFecha(fila.fechaEntrega) : SIN_DATO }}</td>
+                <td>
+                  <span v-if="fila.modalidad" class="panel__modalidad">
+                    <IconoVue :nombre="MODALIDADES[fila.modalidad].icono" :tamano="16" />
+                    {{ MODALIDADES[fila.modalidad].etiquetaCorta }}
+                  </span>
+                  <template v-else>{{ SIN_DATO }}</template>
+                </td>
+                <td>
+                  <ChipEstadoVue :estado="fila.estado.chip" :etiqueta="fila.estado.etiqueta" />
+                </td>
+                <td>{{ fila.metodoPago ?? SIN_DATO }}</td>
+                <td class="tabla__celda--derecha">
+                  <p class="panel__total">{{ formatearMoneda(fila.total) }}</p>
+                  <p class="panel__detalle">{{ formatearKg(fila.totalKg) }}</p>
+                </td>
+              </tr>
+            </TablaVue>
+          </div>
           <div v-else class="panel__estado-vacio">Este cliente no tiene pedidos registrados.</div>
         </section>
       </template>
@@ -322,7 +392,6 @@ const confirmarEliminacionSucursal = async () => {
   display: flex;
   flex-direction: column;
   gap: 32px;
-  max-width: 1100px;
 }
 
 .panel__encabezado-volver {
@@ -429,9 +498,39 @@ const confirmarEliminacionSucursal = async () => {
   vertical-align: middle;
 }
 
+.tabla-scroll {
+  overflow-y: auto;
+  border-radius: var(--gf-radio, 8px);
+}
+
+.tabla-scroll--sucursales {
+  max-height: 220px;
+}
+
+.tabla-scroll--pedidos {
+  max-height: 205px;
+}
+
+.tabla-scroll :deep(thead th) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--gf-fondo);
+}
+
 .panel__id {
   font-weight: 700;
   color: var(--gf-texto);
+}
+
+.panel__folio {
+  color: var(--gf-primario);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.panel__folio:hover {
+  text-decoration: underline;
 }
 
 .panel__texto-fuerte {
@@ -442,6 +541,12 @@ const confirmarEliminacionSucursal = async () => {
 .panel__texto-nombre {
   font-weight: 600;
   color: var(--gf-texto);
+}
+
+.panel__modalidad {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .panel__total {
@@ -492,6 +597,15 @@ const confirmarEliminacionSucursal = async () => {
 
 .btn-accion--eliminar:hover {
   background: color-mix(in srgb, var(--gf-cancelado-bg) 80%, var(--gf-cancelado-fg));
+}
+
+.fila-clicable {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.fila-clicable:hover {
+  background-color: var(--gf-fondo);
 }
 
 @media (max-width: 900px) {

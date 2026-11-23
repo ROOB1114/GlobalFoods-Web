@@ -10,8 +10,7 @@
 // cancelar.
 
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
-
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import AvisoVue from '@/componentes/AvisoVue.vue'
 import BotonVue from '@/componentes/BotonVue.vue'
 import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
@@ -39,6 +38,46 @@ const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
 
 const enrutador = useRouter()
+function regresar() {
+  if (window.history.state?.back) {
+    enrutador.back()
+  } else {
+    enrutador.push({ name: 'pedidos' })
+  }
+}
+const rutaAnterior = typeof window.history.state?.back === 'string' ? window.history.state.back : ''
+
+const origen: {
+  itemActivo: string
+  migas: { etiqueta: string; destino: RouteLocationRaw }[]
+} = (() => {
+  if (rutaAnterior.startsWith('/detalle-cliente-vista/')) {
+    return {
+      itemActivo: 'Clientes',
+      migas: [
+        { etiqueta: 'Clientes', destino: '/clientes' },
+        { etiqueta: 'Detalle del Cliente', destino: rutaAnterior },
+      ],
+    }
+  }
+
+  if (
+    rutaAnterior &&
+    !rutaAnterior.startsWith('/pedidos') &&
+    !rutaAnterior.startsWith('/login') &&
+    !rutaAnterior.startsWith('/iniciar-sesion')
+  ) {
+    return {
+      itemActivo: 'Inicio',
+      migas: [{ etiqueta: 'Inicio', destino: rutaAnterior }],
+    }
+  }
+
+  return {
+    itemActivo: 'Pedidos',
+    migas: [{ etiqueta: 'Pedidos', destino: { name: 'pedidos' } }],
+  }
+})()
 // La ruta solo acepta dígitos (/pedidos/:id(\d+)).
 const id = Number(useRoute().params.id)
 const consulta = reactive(usarDetallePedido(id, { alVencerSesion: () => salirPorSesionVencida(enrutador) }))
@@ -131,12 +170,15 @@ async function alConfirmarCancelacion() {
     titulo="Sistema de Venta a Menudeo"
     :usuario="nombreUsuario"
     :items-navegacion="itemsNavegacion"
-    item-activo="Pedidos"
+    :item-activo="origen.itemActivo"
   >
     <div class="detalle">
       <nav class="migas" aria-label="Ruta de navegación">
         <ol class="migas__lista">
-          <li><RouterLink :to="{ name: 'pedidos' }" class="migas__enlace">Pedidos</RouterLink></li>
+          <li v-for="(miga, indice) in origen.migas" :key="miga.etiqueta">
+            <span v-if="indice > 0" class="migas__separador" aria-hidden="true">›</span>
+            <RouterLink :to="miga.destino" class="migas__enlace">{{ miga.etiqueta }}</RouterLink>
+          </li>
           <li aria-current="page">
             <span class="migas__separador" aria-hidden="true">›</span>
             Pedido #{{ id }}
@@ -145,9 +187,9 @@ async function alConfirmarCancelacion() {
       </nav>
 
       <div class="detalle__encabezado">
-        <RouterLink :to="{ name: 'pedidos' }" class="btn-regresar" aria-label="Volver a pedidos">
+        <button type="button" class="btn-regresar" aria-label="Volver" @click="regresar">
           <IconoVue nombre="flecha-izquierda" :tamano="20" />
-        </RouterLink>
+        </button>
         <h1 class="detalle__titulo">Pedido #{{ id }}</h1>
         <ChipEstadoVue v-if="consulta.pedido" :estado="consulta.pedido.estado.chip" :etiqueta="consulta.pedido.estado.etiqueta" />
         <div v-if="puedeCancelar" class="detalle__acciones">
@@ -341,10 +383,12 @@ async function alConfirmarCancelacion() {
   justify-content: center;
   width: 36px;
   height: 36px;
+  padding: 0;
   border: 1px solid var(--gf-borde);
   border-radius: 50%;
   background: var(--gf-superficie);
   color: var(--gf-texto);
+  cursor: pointer;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease;
