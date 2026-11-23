@@ -9,6 +9,7 @@ export interface ClienteAPI {
   Nombre: string
   Telefono: string
   Estatus: number
+  UsuarioTelegram?: string | null
 }
 
 function getHeaders() {
@@ -58,6 +59,7 @@ export async function cambiarEstatusClienteAPI(cliente: ClienteAPI, estatus: 0 |
     contrasena: cliente.Contrasena,
     nombre: cliente.Nombre,
     telefono: cliente.Telefono,
+    usuarioTelegram: cliente.UsuarioTelegram ?? null,
     estatus,
   } as unknown as Partial<ClienteAPI>)
 }

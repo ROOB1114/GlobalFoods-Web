@@ -108,20 +108,26 @@ const abrirModalEditarCliente = () => {
   mostrarModalCliente.value = true
 }
 
-const guardarCliente = async (datos: { nombre: string; celular: string; usuario: string; contrasena: string }) => {
+const guardarCliente = async (datos: {
+  nombre: string
+  celular: string
+  usuario: string
+  usuarioTelegram: string
+  contrasena: string
+}) => {
   try {
     const payload = {
       usuario: datos.usuario,
       contrasena: datos.contrasena,
       nombre: datos.nombre,
       telefono: datos.celular,
+      usuarioTelegram: datos.usuarioTelegram || null,
       estatus: cliente.value?.Estatus ?? 1
     }
-    
-    // Usamos "as any" para evitar el error de TypeScript y mandar las minúsculas al backend
+
     await actualizarClienteAPI(clienteId, payload as any)
     mostrarModalCliente.value = false
-    await cargarDatos() 
+    await cargarDatos()
   } catch (err: any) {
     alert(err.message || 'Error al guardar el cliente')
   }
@@ -221,12 +227,25 @@ const confirmarEliminacionSucursal = async () => {
           </div>
           <div class="tarjeta-cliente__tabla-wrap">
             <table class="tarjeta-cliente__tabla">
-              <thead><tr><th>USUARIO</th><th>TELÉFONO</th><th>ESTADO</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>USUARIO</th>
+                  <th>TELÉFONO</th>
+                  <th>TELEGRAM</th>
+                  <th>ESTADO</th>
+                </tr>
+              </thead>
               <tbody>
                 <tr>
                   <td class="panel__texto-fuerte">{{ cliente.Usuario }}</td>
                   <td class="panel__texto-fuerte">{{ cliente.Telefono || 'N/A' }}</td>
-                  <td><ChipEstadoVue :estado="cliente.Estatus === 1 ? 'entregado' : 'en_preparacion'" :etiqueta="cliente.Estatus === 1 ? 'Activo' : 'Inactivo'" /></td>
+                  <td class="panel__texto-fuerte">{{ cliente.UsuarioTelegram || 'N/A' }}</td>
+                  <td>
+                    <ChipEstadoVue
+                      :estado="cliente.Estatus === 1 ? 'entregado' : 'en_preparacion'"
+                      :etiqueta="cliente.Estatus === 1 ? 'Activo' : 'Inactivo'"
+                    />
+                  </td>
                 </tr>
               </tbody>
             </table>
