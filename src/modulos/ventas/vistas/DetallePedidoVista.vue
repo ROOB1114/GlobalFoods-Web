@@ -13,8 +13,7 @@
 // abierta la ventana de cancelar o la de registrar el pago.
 
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
-
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import AvisoVue from '@/componentes/AvisoVue.vue'
 import BotonVue from '@/componentes/BotonVue.vue'
 import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
@@ -54,7 +53,6 @@ const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
 
 const enrutador = useRouter()
-const ruta = useRoute()
 // La ruta solo acepta dígitos (/pedidos/:id(\d+)).
 const id = Number(ruta.params.id)
 const consulta = reactive(usarDetallePedido(id, { alVencerSesion: () => salirPorSesionVencida(enrutador) }))
@@ -207,12 +205,15 @@ async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
     titulo="Sistema de Venta a Menudeo"
     :usuario="nombreUsuario"
     :items-navegacion="itemsNavegacion"
-    item-activo="Pedidos"
+    :item-activo="origen.itemActivo"
   >
     <div class="detalle">
       <nav class="migas" aria-label="Ruta de navegación">
         <ol class="migas__lista">
-          <li><RouterLink :to="{ name: 'pedidos' }" class="migas__enlace">Pedidos</RouterLink></li>
+          <li v-for="(miga, indice) in origen.migas" :key="miga.etiqueta">
+            <span v-if="indice > 0" class="migas__separador" aria-hidden="true">›</span>
+            <RouterLink :to="miga.destino" class="migas__enlace">{{ miga.etiqueta }}</RouterLink>
+          </li>
           <li aria-current="page">
             <span class="migas__separador" aria-hidden="true">›</span>
             Pedido #{{ id }}
@@ -221,9 +222,9 @@ async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
       </nav>
 
       <div class="detalle__encabezado">
-        <RouterLink :to="{ name: 'pedidos' }" class="btn-regresar" aria-label="Volver a pedidos">
+        <button type="button" class="btn-regresar" aria-label="Volver" @click="regresar">
           <IconoVue nombre="flecha-izquierda" :tamano="20" />
-        </RouterLink>
+        </button>
         <h1 class="detalle__titulo">Pedido #{{ id }}</h1>
         <ChipEstadoVue v-if="consulta.pedido" :estado="consulta.pedido.estado.chip" :etiqueta="consulta.pedido.estado.etiqueta" />
         <div v-if="puedeEditar || puedeRegistrarPago || puedeCancelar" class="detalle__acciones">
@@ -445,10 +446,12 @@ async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
   justify-content: center;
   width: 36px;
   height: 36px;
+  padding: 0;
   border: 1px solid var(--gf-borde);
   border-radius: 50%;
   background: var(--gf-superficie);
   color: var(--gf-texto);
+  cursor: pointer;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease;
