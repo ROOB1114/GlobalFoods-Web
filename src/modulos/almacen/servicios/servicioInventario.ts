@@ -70,3 +70,41 @@ export async function obtenerInventarioActual(): Promise<ArticuloInventario[]> {
 
   return datosRespuesta.map(aArticulo)
 }
+
+export async function obtenerCatalogoCliente(): Promise<ArticuloInventario[]> {
+  const token = obtenerToken()
+  if (!token) {
+    throw new Error('La sesión no está activa. Inicia sesión nuevamente.')
+  }
+
+  let respuestaHttp: Response
+  try {
+    respuestaHttp = await fetch(`${URL_API.replace(/\/$/, '')}/api/inventario/catalogo`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  } catch {
+    throw new Error('No se pudo conectar con el servidor para cargar el catálogo.')
+  }
+
+  const datosRespuesta = (await respuestaHttp.json().catch(() => null)) as
+    | { codigoProducto?: string | number | null; talla: string; precio: number }[]
+    | { error?: string }
+    | null
+
+  if (!respuestaHttp.ok) {
+    const mensaje = datosRespuesta && !Array.isArray(datosRespuesta) ? datosRespuesta.error : undefined
+    throw new Error(mensaje || 'No se pudo cargar el catálogo de productos.')
+  }
+
+  if (!Array.isArray(datosRespuesta)) {
+    throw new Error('La respuesta de la API no contiene un catálogo válido.')
+  }
+
+  return datosRespuesta.map((articulo) => ({
+    codigoProducto: aCodigoProducto(articulo.codigoProducto),
+    talla: articulo.talla,
+    precio: articulo.precio,
+    master: 0,
+    cantidadKg: 0,
+  }))
+}

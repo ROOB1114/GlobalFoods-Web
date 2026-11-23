@@ -10,16 +10,12 @@ import ModalConfirmacion from '@/componentes/ModalConfirmacion.vue'
 import ModalNuevaSucursal from '@/componentes/ModalNuevaSucursal.vue'
 import ModalNuevoCliente from '@/componentes/ModalNuevoCliente.vue'
 import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
-import {
-  actualizarClienteAPI,
-  actualizarSucursalClienteAPI,
-  crearSucursalClienteAPI,
-  eliminarSucursalClienteAPI,
-  obtenerClientePorIdAPI,
-  obtenerSucursalesClienteAPI,
-  type ClienteAPI,
+import { actualizarClienteAPI, actualizarSucursalClienteAPI, crearSucursalClienteAPI, eliminarSucursalClienteAPI, 
+obtenerClientePorIdAPI, obtenerSucursalesClienteAPI,
+ type ClienteAPI,
 } from '@/modulos/administracion/servicios/servicioClientes'
-import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import { obtenerMenuNavegacion, obtenerNombreUsuario,
+  obtenerRolUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { estadoDePedido } from '@/modulos/ventas/controladores/estadosPedido'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
 import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
@@ -32,7 +28,8 @@ import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servici
 const route = useRoute()
 const enrutador = useRouter()
 const clienteId = Number(route.params.id)
-const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
+const esCliente = obtenerRolUsuario() === 'cliente'
+const nombreUsuario = ref(obtenerNombreUsuario() || 'Usuario')
 const itemsNavegacion = obtenerMenuNavegacion()
 const SIN_DATO = '—'
 
@@ -150,6 +147,10 @@ const guardarCliente = async (datos: {
     }
 
     await actualizarClienteAPI(clienteId, payload as any)
+    if (esCliente && datos.nombre) {
+      localStorage.setItem('nombreUsuario', datos.nombre)
+      nombreUsuario.value = datos.nombre
+    }
     mostrarModalCliente.value = false
     await cargarDatos()
   } catch (err: any) {
@@ -213,14 +214,14 @@ const confirmarEliminacionSucursal = async () => {
     titulo="Sistema de Venta a Menudeo"
     :usuario="nombreUsuario"
     :items-navegacion="itemsNavegacion"
-    item-activo="Clientes"
+    :item-activo="esCliente ? '' : 'Clientes'"
   >
     <div class="panel">
       <!-- Encabezado y volver -->
       <div class="panel__bienvenida">
         <div>
           <div class="panel__encabezado-volver">
-            <RouterLink to="/clientes" class="btn-volver" aria-label="Volver a clientes">
+            <RouterLink :to="esCliente ? '/panel' : '/clientes'" class="btn-volver" aria-label="Volver a clientes">
               <IconoVue nombre="flecha-izquierda" :tamano="20" />
             </RouterLink>
             <h1 class="panel__titulo">Detalle del Cliente</h1>

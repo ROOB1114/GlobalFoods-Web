@@ -8,8 +8,8 @@ import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import LayoutPanelVue from '@/componentes/LayoutPanelVue.vue'
 import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
-import { obtenerInventarioActual, type ArticuloInventario } from '@/modulos/almacen/servicios/servicioInventario'
-import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import {obtenerCatalogoCliente, obtenerInventarioActual, type ArticuloInventario} from '@/modulos/almacen/servicios/servicioInventario'
+import {obtenerMenuNavegacion, obtenerNombreUsuario, obtenerRolUsuario} from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { ESTATUS, estadoDePedido } from '@/modulos/ventas/controladores/estadosPedido'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
 import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
@@ -24,6 +24,7 @@ import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servici
 const enrutador = useRouter()
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
+const esCliente = obtenerRolUsuario() === 'cliente'
 const SIN_DATO = '—'
 
 // --- Inventario ---
@@ -81,7 +82,9 @@ async function cargarInventario() {
   cargandoInventario.value = true
   errorInventario.value = ''
   try {
-    inventario.value = await obtenerInventarioActual()
+    inventario.value = esCliente
+      ? await obtenerCatalogoCliente()
+      : await obtenerInventarioActual()
   } catch (errorCapturado) {
     errorInventario.value =
       errorCapturado instanceof Error ? errorCapturado.message : 'No se pudo cargar el inventario.'
@@ -136,12 +139,17 @@ onUnmounted(() => {
 
 usarActualizacionPeriodica(() => cargarPedidos({ silencioso: true }))
 
-const columnasInventario: ColumnaTabla[] = [
-  { clave: 'talla', etiqueta: 'Talla' },
-  { clave: 'precio', etiqueta: 'Precio' },
-  { clave: 'master', etiqueta: 'Master', alineacion: 'centro' },
-  { clave: 'cantidadKg', etiqueta: 'Stock (kg)', alineacion: 'centro' },
-]
+const columnasInventario: ColumnaTabla[] = esCliente
+  ? [
+      { clave: 'talla', etiqueta: 'Talla' },
+      { clave: 'precio', etiqueta: 'Precio' },
+    ]
+  : [
+      { clave: 'talla', etiqueta: 'Talla' },
+      { clave: 'precio', etiqueta: 'Precio' },
+      { clave: 'master', etiqueta: 'Master', alineacion: 'centro' },
+      { clave: 'cantidadKg', etiqueta: 'Stock (kg)', alineacion: 'centro' },
+    ]
 
 const columnasPedidos: ColumnaTabla[] = [
   { clave: 'folio', etiqueta: 'Folio' },
@@ -181,12 +189,15 @@ const columnasPedidos: ColumnaTabla[] = [
       </div>
 
       <!-- Sección de Inventario -->
+      <!-- Sección de Inventario -->
       <section class="panel__seccion">
-        <EncabezadoSeccionVue titulo="Inventario" icono="caja" />
+        <EncabezadoSeccionVue :titulo="esCliente ? 'Catálogo de Productos' : 'Inventario'" icono="caja" />
 
         <TablaVue :columnas="columnasInventario" :alto-maximo="altoInventario">
           <tr v-if="cargandoInventario">
-            <td :colspan="columnasInventario.length" class="panel__mensaje">Cargando inventario...</td>
+            <td :colspan="columnasInventario.length" class="panel__mensaje">
+              {{ esCliente ? 'Cargando catálogo...' : 'Cargando inventario...' }}
+            </td>
           </tr>
           <tr v-else-if="errorInventario">
             <td :colspan="columnasInventario.length" class="panel__mensaje panel__error" role="alert">
@@ -199,8 +210,8 @@ const columnasPedidos: ColumnaTabla[] = [
           <tr v-for="fila in inventario" :key="fila.talla">
             <td>{{ fila.talla }}</td>
             <td>{{ formatearMoneda(fila.precio) }}</td>
-            <td class="tabla__celda--centro">{{ fila.master }}</td>
-            <td class="tabla__celda--centro">{{ fila.cantidadKg }}</td>
+            <td v-if="!esCliente" class="tabla__celda--centro">{{ fila.master }}</td>
+            <td v-if="!esCliente" class="tabla__celda--centro">{{ fila.cantidadKg }}</td>
           </tr>
         </TablaVue>
       </section>

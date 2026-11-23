@@ -27,22 +27,22 @@ const confirmacionDatos = ref(false) // Nueva variable para confirmación
 
 // Escuchar cambios en la prop 'usuarioEditar' para precargar los datos o limpiar el formulario
 watch(
-  () => props.usuarioEditar,
-  (nuevoUsuario) => {
+  [() => props.usuarioEditar, () => props.mostrar],
+  ([nuevoUsuario, estaVisible]) => {
+    if (!estaVisible) return
     if (nuevoUsuario) {
       nombre.value = nuevoUsuario.Nombre || ''
       usuario.value = nuevoUsuario.Usuario || ''
       contrasena.value = nuevoUsuario.Contrasena || ''
-      
+
       const tipo = nuevoUsuario.TipoUsuario || 'Administrador'
       if (tipo === 'Administrador' || tipo === 'Empleado' || tipo === 'Reporte') {
         tipoSeleccionado.value = tipo
       } else {
         tipoSeleccionado.value = 'Administrador'
       }
-      confirmacionDatos.value = false // Desmarcamos por seguridad al abrir
+      confirmacionDatos.value = false
     } else {
-      // Limpiar formulario para nuevo registro
       nombre.value = ''
       usuario.value = ''
       contrasena.value = ''
