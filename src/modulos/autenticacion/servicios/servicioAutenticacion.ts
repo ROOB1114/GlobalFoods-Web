@@ -74,6 +74,21 @@ export function obtenerRolUsuario(): string {
   return (localStorage.getItem('rolUsuario') || 'administrador').toLowerCase()
 }
 
+export function obtenerIdUsuarioSesion(): number | null {
+  const token = obtenerToken()
+  if (!token) return null
+  try {
+    const partePayload = token.split('.')[1]
+    if (!partePayload) return null
+    const base64 = partePayload.replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(base64)) as { userId?: number; sub?: string }
+    const id = Number(payload.userId ?? payload.sub)
+    return Number.isSafeInteger(id) && id > 0 ? id : null
+  } catch {
+    return null
+  }
+}
+
 export function obtenerMenuNavegacion(): ItemNavegacion[] {
   const rol = obtenerRolUsuario()
 

@@ -1,5 +1,5 @@
 import { onUnmounted, shallowRef } from 'vue'
-
+import { obtenerNombreUsuario, obtenerRolUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import type { SucursalCliente } from '@/modulos/ventas/interfaces/cliente'
 import {
   descartarClientesEnMemoria,
@@ -15,12 +15,13 @@ import {
  * Si una consulta falla, la pantalla sigue: se muestran los Id y la siguiente carga lo reintenta.
  */
 export function usarDirectorioPedidos() {
+  const esCliente = obtenerRolUsuario() === 'cliente'
   const nombresClientes = shallowRef(new Map<number, string>())
-  /** Sucursales por cliente; null si su consulta falló. */
   const sucursalesPorCliente = shallowRef(new Map<number, SucursalCliente[] | null>())
   const consultasEnCurso = new Map<number, Promise<void>>()
 
   async function cargarClientes() {
+    if (esCliente) return
     try {
       const clientes = await obtenerClientesActivos()
       nombresClientes.value = new Map(clientes.map((cliente) => [cliente.id, cliente.nombre]))
@@ -54,6 +55,7 @@ export function usarDirectorioPedidos() {
   }
 
   function nombreCliente(idCliente: number): string {
+    if (esCliente) return obtenerNombreUsuario() || `Cliente #${idCliente}`
     return nombresClientes.value.get(idCliente) ?? `Cliente #${idCliente}`
   }
 
