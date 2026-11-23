@@ -1,66 +1,121 @@
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 
 import BotonVue from '@/componentes/BotonVue.vue'
-import ChipEstadoVue, { type EstadoPedido } from '@/componentes/ChipEstadoVue.vue'
+import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import LayoutPanelVue from '@/componentes/LayoutPanelVue.vue'
 import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
-import { obtenerNombreUsuario, obtenerMenuNavegacion } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { obtenerInventarioActual, type ArticuloInventario } from '@/modulos/almacen/servicios/servicioInventario'
+import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import { ESTATUS, estadoDePedido } from '@/modulos/ventas/controladores/estadosPedido'
+import { formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
+import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
+import { usarActualizacionPeriodica } from '@/modulos/ventas/controladores/usarActualizacionPeriodica'
+import { usarDirectorioPedidos } from '@/modulos/ventas/controladores/usarDirectorioPedidos'
+import type { Pedido } from '@/modulos/ventas/interfaces/pedido'
+import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
 
-
+const enrutador = useRouter()
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
+
+// --- Inventario ---
 const inventario = ref<ArticuloInventario[]>([])
 const cargandoInventario = ref(true)
 const errorInventario = ref('')
+
+// --- Pedidos actuales ---
+const pedidos = shallowRef<Pedido[]>([])
+const cargandoPedidos = ref(true)
+const errorPedidos = ref('')
+const directorio = usarDirectorioPedidos()
+
+const ESTATUS_EN_CURSO = new Set<number>([ESTATUS.creado, ESTATUS.surtido, ESTATUS.enReparto])
+
+const pedidosActuales = computed(() =>
+  pedidos.value
+    .filter((pedido) => ESTATUS_EN_CURSO.has(pedido.estatus))
+    .map((pedido) => ({
+      id: pedido.id,
+      cliente: directorio.nombreCliente(pedido.idCliente),
+      articulos: pedido.lineas.length,
+      totalKg: pedido.totalKg,
+      estado: estadoDePedido(pedido.estatus),
+      total: pedido.total,
+      fecha: pedido.fechaRegistro,
+    })),
+)
 
 // Alturas dinámicas para las tablas
 const altoInventario = ref(250)
 const altoPedidos = ref(200)
 
 const actualizarAlturas = () => {
-  // Si la pantalla es más pequeña que 820px de alto (como en tu laptop)
   if (window.innerHeight < 820) {
     altoInventario.value = 180
     altoPedidos.value = 160
   } else {
-    // Si estás en un monitor más grande (PC)
     altoInventario.value = 260
     altoPedidos.value = 200
   }
 }
 
-onMounted(async () => {
-  actualizarAlturas()
-  window.addEventListener('resize', actualizarAlturas)
-
+async function cargarInventario() {
+  cargandoInventario.value = true
+  errorInventario.value = ''
   try {
     inventario.value = await obtenerInventarioActual()
   } catch (errorCapturado) {
-    errorInventario.value = errorCapturado instanceof Error
-      ? errorCapturado.message
-      : 'No se pudo cargar el inventario.'
+    errorInventario.value =
+      errorCapturado instanceof Error ? errorCapturado.message : 'No se pudo cargar el inventario.'
   } finally {
     cargandoInventario.value = false
   }
+}
+
+async function cargarPedidos(opciones: { silencioso?: boolean } = {}) {
+  const silencioso = opciones.silencioso === true
+  if (silencioso && cargandoPedidos.value) return
+  if (!silencioso) {
+    cargandoPedidos.value = true
+    errorPedidos.value = ''
+  }
+  try {
+    const [lista] = await Promise.all([obtenerPedidos(), directorio.cargarClientes()])
+    pedidos.value = [...lista].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro) || b.id - a.id)
+    errorPedidos.value = ''
+  } catch (errorCapturado) {
+    if (errorCapturado instanceof ErrorPedidos && errorCapturado.motivo === 'sesion') {
+      salirPorSesionVencida(enrutador)
+      return
+    }
+    if (!silencioso) {
+      errorPedidos.value = 'No fue posible cargar los pedidos actuales.'
+    }
+  } finally {
+    if (!silencioso) cargandoPedidos.value = false
+  }
+}
+
+function abrirDetallePedido(id: number) {
+  enrutador.push({ name: 'detalle-pedido', params: { id } })
+}
+
+onMounted(() => {
+  actualizarAlturas()
+  window.addEventListener('resize', actualizarAlturas)
+  cargarInventario()
+  cargarPedidos()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', actualizarAlturas)
 })
 
-const formatoPrecio = new Intl.NumberFormat('es-MX', {
-  style: 'currency',
-  currency: 'MXN',
-  maximumFractionDigits: 2,
-})
-
-function mostrarPrecio(precio: number): string {
-  return formatoPrecio.format(precio)
-}
+usarActualizacionPeriodica(() => cargarPedidos({ silencioso: true }))
 
 const columnasInventario: ColumnaTabla[] = [
   { clave: 'talla', etiqueta: 'Talla' },
@@ -74,19 +129,6 @@ const columnasPedidos: ColumnaTabla[] = [
   { clave: 'cliente', etiqueta: 'Cliente' },
   { clave: 'estado', etiqueta: 'Estado' },
   { clave: 'total', etiqueta: 'Total', alineacion: 'derecha' },
-]
-
-const pedidos: {
-  id: string
-  cliente: string
-  articulos: number
-  estado: EstadoPedido
-  total: string
-  hace: string
-}[] = [
-  { id: '#12345', cliente: 'Victoria Ontiveros', articulos: 2, estado: 'pendiente', total: '$560', hace: 'hace 5 min' },
-  { id: '#12346', cliente: 'Restaurante Mar y Tierra', articulos: 5, estado: 'en_preparacion', total: '$1,450', hace: 'hace 20 min' },
-  { id: '#12347', cliente: 'Mariscos El Faro', articulos: 3, estado: 'en_reparto', total: '$980', hace: 'hace 1 hora' },
 ]
 </script>
 
@@ -108,7 +150,7 @@ const pedidos: {
         </div>
 
         <div class="panel__accion">
-          <BotonVue variante="exito" @click="$router.push({ name: 'nuevo-pedido' })">
+          <BotonVue variante="exito" @click="enrutador.push({ name: 'nuevo-pedido' })">
             <IconoVue nombre="mas" :tamano="16" />
             Nuevo Pedido
           </BotonVue>
@@ -121,17 +163,17 @@ const pedidos: {
 
         <TablaVue :columnas="columnasInventario" :alto-maximo="altoInventario">
           <tr v-if="cargandoInventario">
-            <td colspan="4">Cargando inventario...</td>
+            <td colspan="4" class="panel__mensaje">Cargando inventario...</td>
           </tr>
           <tr v-else-if="errorInventario">
-            <td colspan="4" role="alert">{{ errorInventario }}</td>
+            <td colspan="4" class="panel__mensaje panel__error" role="alert">{{ errorInventario }}</td>
           </tr>
           <tr v-else-if="inventario.length === 0">
-            <td colspan="4">No hay productos disponibles.</td>
+            <td colspan="4" class="panel__mensaje">No hay productos disponibles.</td>
           </tr>
           <tr v-for="fila in inventario" :key="fila.talla">
             <td>{{ fila.talla }}</td>
-            <td>{{ mostrarPrecio(fila.precio) }}</td>
+            <td>{{ formatearMoneda(fila.precio) }}</td>
             <td class="tabla__celda--centro">{{ fila.master }}</td>
             <td class="tabla__celda--centro">{{ fila.cantidadKg }}</td>
           </tr>
@@ -143,20 +185,52 @@ const pedidos: {
         <EncabezadoSeccionVue titulo="Pedidos Actuales" icono="reloj" />
 
         <TablaVue :columnas="columnasPedidos" :alto-maximo="altoPedidos">
-          <tr v-for="pedido in pedidos" :key="pedido.id">
-            <td class="panel__id">{{ pedido.id }}</td>
+          <tr v-if="cargandoPedidos">
+            <td colspan="4" class="panel__mensaje">Cargando pedidos...</td>
+          </tr>
+          <tr v-else-if="errorPedidos">
+            <td colspan="4" class="panel__mensaje">
+              <p class="panel__error" role="alert">{{ errorPedidos }}</p>
+              <div class="panel__reintentar">
+                <BotonVue variante="secundario" compacto @click="cargarPedidos()">Reintentar</BotonVue>
+              </div>
+            </td>
+          </tr>
+          <tr v-else-if="pedidosActuales.length === 0">
+            <td colspan="4" class="panel__mensaje">No hay pedidos pendientes ni en curso.</td>
+          </tr>
+          <tr
+            v-for="pedido in pedidosActuales"
+            :key="pedido.id"
+            class="fila-clicable"
+            @click="abrirDetallePedido(pedido.id)"
+          >
+            <td class="panel__id">
+              <RouterLink
+                :to="{ name: 'detalle-pedido', params: { id: pedido.id } }"
+                class="panel__folio"
+                @click.stop
+              >
+                #{{ pedido.id }}
+              </RouterLink>
+            </td>
             <td>
               <p class="panel__cliente">{{ pedido.cliente }}</p>
-              <p class="panel__detalle">{{ pedido.articulos }} Items</p>
+              <p class="panel__detalle">
+                <template v-if="pedido.articulos > 0">
+                  {{ pedido.articulos }} {{ pedido.articulos === 1 ? 'producto' : 'productos' }} ·
+                </template>
+                {{ formatearKg(pedido.totalKg) }}
+              </p>
             </td>
             <td>
-              <ChipEstadoVue :estado="pedido.estado" />
+              <ChipEstadoVue :estado="pedido.estado.chip" :etiqueta="pedido.estado.etiqueta" />
             </td>
             <td class="tabla__celda--derecha">
-              <p class="panel__total">{{ pedido.total }}</p>
+              <p class="panel__total">{{ formatearMoneda(pedido.total) }}</p>
               <p class="panel__detalle panel__hace">
                 <IconoVue nombre="reloj" :tamano="12" />
-                {{ pedido.hace }}
+                {{ formatearFecha(pedido.fecha) || '—' }}
               </p>
             </td>
           </tr>
@@ -204,8 +278,34 @@ const pedidos: {
   flex: none;
 }
 
+.panel__mensaje {
+  padding: 20px 16px;
+  color: var(--gf-texto-tenue);
+  text-align: center;
+}
+
+.panel__error {
+  margin: 0;
+  color: var(--gf-cancelado-fg);
+}
+
+.panel__reintentar {
+  display: inline-flex;
+  margin-top: 10px;
+}
+
 .panel__id {
   font-weight: 700;
+}
+
+.panel__folio {
+  color: var(--gf-primario);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.panel__folio:hover {
+  text-decoration: underline;
 }
 
 .panel__cliente {
@@ -230,6 +330,15 @@ const pedidos: {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
+}
+
+.fila-clicable {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.fila-clicable:hover {
+  background-color: var(--gf-fondo);
 }
 
 @media (max-width: 900px) {
