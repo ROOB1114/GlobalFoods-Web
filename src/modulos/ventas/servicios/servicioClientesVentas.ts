@@ -20,8 +20,6 @@ interface SucursalClienteAPI {
   NombreSucursal: string
   Direccion: string | null
   Telefono: string | null
-  /** Puede no venir mientras la API no tenga la columna. */
-  Referencias?: string | null
   Estatus: number
 }
 
@@ -81,7 +79,6 @@ function aSucursal(sucursal: SucursalClienteAPI): SucursalCliente {
     nombre: sucursal.NombreSucursal.trim(),
     direccion: textoOpcional(sucursal.Direccion),
     telefono: textoOpcional(sucursal.Telefono),
-    referencias: textoOpcional(sucursal.Referencias),
   }
 }
 

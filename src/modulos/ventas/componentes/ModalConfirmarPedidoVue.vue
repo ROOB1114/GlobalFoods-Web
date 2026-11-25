@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// Confirmación del pedido antes de registrarlo y, si sale bien, el folio asignado.
+// Confirmación del pedido antes de registrarlo y, si sale bien, el folio asignado con la invitación
+// a consultar el pedido con el asistente de Telegram.
 // Cerrar (Escape, velo o X) equivale a "Corregir" al confirmar y a "Registrar otro pedido" al terminar.
 // En Editar pedido (`folioEdicion`) confirma que se guardan los cambios; ahí no hay estado de
 // éxito: la vista regresa al detalle.
@@ -15,6 +16,7 @@ import {
   formatearNumero,
   textoProductosKg,
 } from '@/modulos/ventas/controladores/formatosPedido'
+import { URL_ASISTENTE } from '@/modulos/ventas/controladores/asistente'
 import { IDS_CAMPOS } from '@/modulos/ventas/controladores/usarFormularioPedido'
 import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import type { ResumenPedido } from '@/modulos/ventas/interfaces/pedido'
@@ -118,10 +120,6 @@ watch(
             <dt>Dirección</dt>
             <dd>{{ resumen.direccionEntrega }}</dd>
           </div>
-          <div v-if="resumen.referencias" class="confirmacion__dato confirmacion__dato--largo">
-            <dt>Referencias</dt>
-            <dd>{{ resumen.referencias }}</dd>
-          </div>
         </template>
         <div v-if="resumen.observaciones" class="confirmacion__dato confirmacion__dato--largo">
           <dt>Observaciones</dt>
@@ -157,6 +155,14 @@ watch(
       <p :id="ID_MENSAJE_EXITO" class="exito__mensaje">
         Pedido <strong>{{ folio }}</strong> registrado correctamente.
       </p>
+
+      <div class="asistente">
+        <span class="asistente__icono" aria-hidden="true"><IconoVue nombre="mensaje" :tamano="18" /></span>
+        <p class="asistente__texto">¿Quieres comunicarte con nuestro asistente para información sobre tu pedido?</p>
+        <a class="asistente__enlace" :href="URL_ASISTENTE" target="_blank" rel="noopener">
+          Abrir en Telegram<span class="visualmente-oculto"> (se abre en otra pestaña)</span>
+        </a>
+      </div>
     </div>
 
     <template #pie>
@@ -293,5 +299,49 @@ watch(
   margin: 0;
   color: var(--gf-texto);
   font-size: 16px;
+}
+
+.asistente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--gf-borde);
+  border-radius: 8px;
+  background: var(--gf-fondo);
+  text-align: left;
+}
+
+.asistente__icono {
+  display: inline-flex;
+  color: var(--gf-secundario);
+}
+
+.asistente__texto {
+  flex: 1 1 220px;
+  margin: 0;
+  color: var(--gf-texto);
+  font-size: 13px;
+}
+
+.asistente__enlace {
+  color: var(--gf-secundario);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.asistente__enlace:hover {
+  text-decoration: underline;
+}
+
+.asistente__enlace:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--gf-secundario);
+  outline-offset: 2px;
 }
 </style>

@@ -174,23 +174,14 @@ const solicitarEliminarSucursal = (sucursal: any) => {
   mostrarModalConfirmacionSucursal.value = true
 }
 
-const guardarSucursal = async (datos: {
-  nombreSucursal: string
-  direccion: string
-  referencias: string
-  telefono: string
-}) => {
+const guardarSucursal = async (datos: { nombreSucursal: string; direccion: string; telefono: string }) => {
   try {
-    // Referencias: se mandan si se capturaron, o al editar una sucursal que ya las trae (para
-    // poder borrarlas). Así, mientras la API no tenga la columna, crear sin referencias sigue igual.
-    const apiTieneReferencias = !!sucursalSeleccionada.value && 'Referencias' in sucursalSeleccionada.value
     const payload = {
       idCliente: clienteId,
       NombreSucursal: datos.nombreSucursal,
       Direccion: datos.direccion,
       Telefono: datos.telefono,
       Estatus: 1,
-      ...(datos.referencias || apiTieneReferencias ? { Referencias: datos.referencias || null } : {}),
     }
 
     if (sucursalSeleccionada.value) {
@@ -298,10 +289,7 @@ const confirmarEliminacionSucursal = async () => {
             <TablaVue :columnas="columnasSucursales">
               <tr v-for="suc in sucursales" :key="suc.Id">
                 <td class="panel__texto-nombre">{{ suc.NombreSucursal }}</td>
-                <td>
-                  {{ suc.Direccion }}
-                  <span v-if="suc.Referencias" class="sucursal__referencias">Ref: {{ suc.Referencias }}</span>
-                </td>
+                <td>{{ suc.Direccion }}</td>
                 <td class="panel__texto-fuerte">{{ suc.Telefono || 'N/A' }}</td>
                 <td>
                   <ChipEstadoVue
@@ -554,13 +542,6 @@ const confirmarEliminacionSucursal = async () => {
 .panel__texto-nombre {
   font-weight: 600;
   color: var(--gf-texto);
-}
-
-.sucursal__referencias {
-  display: block;
-  margin-top: 2px;
-  color: var(--gf-texto-tenue);
-  font-size: 12px;
 }
 
 .panel__modalidad {

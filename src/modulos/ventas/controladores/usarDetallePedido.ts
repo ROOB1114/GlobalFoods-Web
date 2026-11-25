@@ -36,7 +36,6 @@ export interface DetallePedido {
   modalidad: ModalidadEntrega | null
   /** aaaa-mm-dd, de la API; null mientras no se registra el pago (en la web o en el sistema interno). */
   fechaEntrega: string | null
-  referencias: string | null
   /** Lo que capturó la asesora (lo que queda después de leer el formato de Observaciones). */
   notas: string | null
   /** "Pendiente", "Efectivo" o "Crédito o transferencia"; null si la API no lo trae. */
@@ -115,8 +114,6 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
       telefonoSucursal: sucursal?.telefono ?? null,
       modalidad,
       fechaEntrega: actual.fechaEntrega,
-      // Las "Ref:" de los pedidos de antes; si no trae, las registradas de la sucursal.
-      referencias: modalidad === 'recoleccion' ? null : (entrega.referencias ?? sucursal?.referencias ?? null),
       notas: entrega.notas,
       metodoPago: textoMetodoPago(actual.metodoPago),
       lineas: actual.lineas,

@@ -42,7 +42,6 @@ Props opcionales:
 - `icono`: `usuario`, `candado` o `lupa`.
 - `error`: mensaje debajo del campo; agrega `aria-invalid` y lo enlaza con `aria-describedby`.
 - `obligatorio`: asterisco rojo en la etiqueta y `aria-required`.
-- `opcional`: agrega "(opcional)" en tono tenue después de la etiqueta (se ignora si también es `obligatorio`).
 - `compacto`: etiqueta de 14 px y texto de 15 px, para formularios con muchos campos.
 - `ayuda`: texto de apoyo debajo del campo, anunciado al cambiar (`aria-live`) y enlazado con `aria-describedby`. Pasa `''` para dejar lista la región aunque todavía no haya texto.
 
@@ -65,7 +64,7 @@ Los atributos que no son props (`autocomplete`, `min`, `readonly`, `role`, `aria
 ### IconoVue.vue
 Componente para renderizar iconos SVG con tamaño y color controlados por el texto actual o por clases CSS.
 
-Iconos disponibles: `inicio`, `pedidos`, `clientes`, `reportes`, `usuario`, `caja`, `reloj`, `engrane`, `salir`, `mas`, `menos`, `bolsa`, `lapiz`, `basura`, `candado`, `flecha-izquierda`, `lupa`, `camion`, `check`, `calendario`, `congeladora`, `cerrar` y `alerta`. Todos son de trazo, con `viewBox` de 24 y `currentColor`. Para agregar uno, suma su nombre a `NombreIcono` y su dibujo al template con el mismo estilo.
+Iconos disponibles: `inicio`, `pedidos`, `clientes`, `reportes`, `usuario`, `caja`, `reloj`, `engrane`, `salir`, `mas`, `menos`, `bolsa`, `lapiz`, `basura`, `candado`, `flecha-izquierda`, `lupa`, `camion`, `check`, `calendario`, `congeladora`, `cerrar`, `alerta`, `ojo`, `ojo-cerrado` y `mensaje`. Todos son de trazo, con `viewBox` de 24 y `currentColor`. Para agregar uno, suma su nombre a `NombreIcono` y su dibujo al template con el mismo estilo.
 
 ### ChipEstadoVue.vue
 Píldora de estado utilizada para mostrar estados como activo, inactivo, entregado, pendiente o cancelado.

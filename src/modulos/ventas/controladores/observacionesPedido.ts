@@ -4,9 +4,8 @@ import type { DatosRegistroPedido, ModalidadEntrega } from '@/modulos/ventas/int
 // Observaciones, seguida de lo que capturó la asesora:
 //   "A domicilio · Llamar antes de llegar"
 //   "Recolección en congeladora · Pasa por la tarde"
-// Las referencias ya no se capturan en el pedido: son de la sucursal. Los pedidos anteriores (y los
-// de la app móvil) las traen como "Ref: …" después de la modalidad; se siguen leyendo y, al editar
-// uno de esos pedidos, se conservan.
+// La web ya no maneja referencias. Los pedidos anteriores (y los de la app móvil) pueden traer
+// "Ref: …" después de la modalidad: se deja como parte de las notas, tal cual, para no perderlo.
 // armarObservaciones() escribe ese formato y leerObservaciones() lo lee; si cambia, se cambia aquí.
 //
 // La fecha de entrega ya no va en Observaciones: la API la regresa en su propio campo
@@ -17,6 +16,7 @@ import type { DatosRegistroPedido, ModalidadEntrega } from '@/modulos/ventas/int
 
 const SEPARADOR = ' · '
 const PREFIJO_DIRECCION = 'Dir: '
+/** Lo escribían los pedidos anteriores y la app móvil; se deja en las notas. */
 const PREFIJO_REFERENCIAS = 'Ref: '
 /** Lo escribían los pedidos anteriores y la app móvil; se salta al leer. */
 const FECHA_ENTREGA_ANTERIOR = /^Entrega \d{2}\/\d{2}\/\d{4}$/
@@ -31,23 +31,15 @@ export interface ObservacionesPedido {
   modalidad: ModalidadEntrega | null
   /** Solo si el texto trae "Dir: …"; si no, null. */
   direccion: string | null
-  referencias: string | null
-  /** Lo que capturó la asesora; si el texto no empieza con una modalidad, el texto completo. */
+  /**
+   * Lo que capturó la asesora (con las "Ref: …" de los pedidos de antes, si traen); si el texto no
+   * empieza con una modalidad, el texto completo.
+   */
   notas: string | null
 }
 
-/**
- * `referenciasAnteriores`: las "Ref: …" que ya traía el pedido (solo al editar uno de antes), para
- * no perderlas. Los pedidos nuevos no llevan.
- */
-export function armarObservaciones(
-  datos: Pick<DatosRegistroPedido, 'modalidad' | 'observaciones'>,
-  referenciasAnteriores: string | null = null,
-): string {
+export function armarObservaciones(datos: Pick<DatosRegistroPedido, 'modalidad' | 'observaciones'>): string {
   const partes = [MODALIDAD_EN_TEXTO[datos.modalidad]]
-  if (datos.modalidad === 'domicilio' && referenciasAnteriores) {
-    partes.push(`${PREFIJO_REFERENCIAS}${referenciasAnteriores}`)
-  }
   if (datos.observaciones) partes.push(datos.observaciones)
   return partes.join(SEPARADOR)
 }
@@ -56,7 +48,7 @@ export function armarObservaciones(
  * Separa los datos de entrega de las notas. Si el texto no empieza con una modalidad (p. ej. un
  * pedido capturado en el sistema interno), regresa todo null y el texto completo como notas.
  * Si después de la modalidad viene "Entrega dd/mm/aaaa" (pedidos anteriores y de la app), se
- * ignora. Si unas referencias traen " · ", lo que sigue de ellas se lee como notas.
+ * ignora. Las "Ref: …" de los pedidos de antes se quedan al inicio de las notas.
  */
 export function leerObservaciones(texto: string | null): ObservacionesPedido {
   const completo = texto?.trim() ?? ''
@@ -66,20 +58,21 @@ export function leerObservaciones(texto: string | null): ObservacionesPedido {
   )
 
   if (!modalidad) {
-    return { modalidad: null, direccion: null, referencias: null, notas: completo || null }
+    return { modalidad: null, direccion: null, notas: completo || null }
   }
 
   if (FECHA_ENTREGA_ANTERIOR.test(resto[0] ?? '')) resto.shift()
 
-  // Dirección y referencias solo van a domicilio, en cualquier orden, antes de las notas.
+  // Dirección y "Ref: …" solo van a domicilio, en cualquier orden, antes de las notas. La
+  // dirección se separa; las referencias se quedan como texto al inicio de las notas.
   let direccion: string | null = null
-  let referencias: string | null = null
+  const referenciasAnteriores: string[] = []
   while (modalidad === 'domicilio' && resto.length > 0) {
     const parte = resto[0] ?? ''
     if (direccion === null && parte.startsWith(PREFIJO_DIRECCION)) {
       direccion = parte.slice(PREFIJO_DIRECCION.length).trim()
-    } else if (referencias === null && parte.startsWith(PREFIJO_REFERENCIAS)) {
-      referencias = parte.slice(PREFIJO_REFERENCIAS.length).trim()
+    } else if (parte.startsWith(PREFIJO_REFERENCIAS)) {
+      referenciasAnteriores.push(parte)
     } else {
       break
     }
@@ -89,7 +82,6 @@ export function leerObservaciones(texto: string | null): ObservacionesPedido {
   return {
     modalidad,
     direccion: direccion || null,
-    referencias: referencias || null,
-    notas: resto.join(SEPARADOR).trim() || null,
+    notas: [...referenciasAnteriores, ...resto].join(SEPARADOR).trim() || null,
   }
 }
