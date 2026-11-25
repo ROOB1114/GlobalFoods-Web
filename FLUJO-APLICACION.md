@@ -82,12 +82,12 @@ La base actual del sistema tiene estas rutas principales:
 - **Entrega**:
   - Modalidad: Entrega a domicilio o Recolección en congeladora.
   - No se captura fecha de entrega: se llena al registrar el pago (en el detalle del pedido o en el sistema interno).
-  - A domicilio se entrega siempre en la dirección registrada de la sucursal elegida: se muestra de solo lectura con un enlace "Ver en Maps" y no se puede escribir otra. Si la sucursal no tiene dirección, no se puede registrar a domicilio hasta que se capture en las sucursales del cliente. Las referencias son opcionales.
+  - A domicilio se entrega siempre en la dirección registrada de la sucursal elegida: se muestra de solo lectura con un enlace "Ver en Maps" y no se puede escribir otra. Si la sucursal no tiene dirección, no se puede registrar a domicilio hasta que se capture en las sucursales del cliente. Las referencias tampoco se capturan en el pedido: son las de la sucursal (se registran, opcionales, al crear o editar la sucursal en el detalle del cliente) y se muestran debajo de la dirección.
   - Recolección no pide sucursal: muestra el punto de recolección (Proceso Conservación y Comercio (Global Foods)) con un enlace "Ver en Maps".
   - No se elige método de pago: todo pedido nuevo se crea como Pendiente y cambia a Efectivo o Crédito o transferencia al registrar el pago, en el detalle del pedido o en el sistema interno.
   - Las observaciones son opcionales, de máximo 250 caracteres.
 - Al registrar se valida todo y el foco va al primer error. Si todo es válido, se confirma el resumen antes de enviar.
-- El registro usa `POST /api/pedidos` y manda siempre `MetodoPago` en 0 (pendiente) y en `Fecha` el día en que se crea. A domicilio, `IdSucursal` es la sucursal elegida; en recolección va en 0. La modalidad y las referencias (si se capturaron) viajan al inicio de `Observaciones` (`A domicilio · Ref: … · notas` o `Recolección en congeladora · notas`), porque la API no tiene campos para ellas. El folio es `#` y el `Id` del pedido creado.
+- El registro usa `POST /api/pedidos` y manda siempre `MetodoPago` en 0 (pendiente) y en `Fecha` el día en que se crea. A domicilio, `IdSucursal` es la sucursal elegida; en recolección va en 0. La modalidad viaja al inicio de `Observaciones` (`A domicilio · notas` o `Recolección en congeladora · notas`), porque la API no tiene campo para ella. Los pedidos anteriores traen además `Ref: …`; se siguen leyendo y, al editarlos, se conservan. El folio es `#` y el `Id` del pedido creado.
 
 ```mermaid
 flowchart TD
@@ -150,8 +150,8 @@ flowchart TD
 ### 6. Editar pedido (módulo de ventas)
 
 - `EditarPedidoVista.vue` usa las mismas secciones, resumen y modales que Nuevo pedido, y la misma lógica de formulario (`usarFormularioPedido.ts`); lo propio de la edición está en `usarEditarPedido.ts`. Solo se edita un pedido Pendiente (RF-PED-02).
-- Al abrir, carga el pedido y llena el formulario: cliente fijo (no se puede cambiar), sucursal, modalidad, referencias, observaciones y productos con su cantidad. La sucursal se elige cuando llegan las sucursales activas del cliente.
-- Se pueden cambiar productos y cantidades, modalidad, sucursal (a domicilio, su dirección es la de entrega), referencias y observaciones, con las mismas validaciones y mensajes que Nuevo pedido.
+- Al abrir, carga el pedido y llena el formulario: cliente fijo (no se puede cambiar), sucursal, modalidad, observaciones y productos con su cantidad. La sucursal se elige cuando llegan las sucursales activas del cliente.
+- Se pueden cambiar productos y cantidades, modalidad, sucursal (a domicilio, su dirección y referencias son las de entrega) y observaciones, con las mismas validaciones y mensajes que Nuevo pedido.
 - Las líneas que ya traía el pedido conservan su precio por kg; las nuevas toman el del inventario. El límite de una línea que ya venía es lo disponible o lo que ya tenía, lo que sea mayor; si su producto ya no está en el inventario, no se puede aumentar.
 - Si el pedido ya no está Pendiente, en lugar del formulario se avisa "El pedido ya no puede modificarse porque se encuentra [estado]." con un enlace al detalle.
 - Guardar confirma "¿Guardar los cambios del pedido #id por $total?", vuelve a consultar el pedido y, si sigue Pendiente, lo manda con `PUT /api/pedidos/:id` con la sucursal, los totales, las observaciones y las líneas nuevas; el cliente, la fecha, el estatus, el método de pago y la fecha de entrega van tal como llegaron.

@@ -68,8 +68,9 @@ function clienteDelPedido(idCliente: number, activos: Cliente[]): Cliente {
 /**
  * Editar pedido (RF-PED-02): carga un pedido Pendiente en el formulario común
  * (usarFormularioPedido) y guarda los cambios con actualizarPedido(). Se pueden cambiar productos
- * y cantidades, modalidad, sucursal (a domicilio, su dirección registrada es la de entrega),
- * referencias y observaciones; el cliente no.
+ * y cantidades, modalidad, sucursal (a domicilio, su dirección y referencias registradas son las
+ * de entrega) y observaciones; el cliente no. Las referencias que un pedido de antes traía en
+ * Observaciones no se muestran aquí, pero se conservan al guardar (ver actualizarPedido()).
  * Si el pedido ya no está Pendiente, el formulario no se llena y `estadoNoEditable` dice en qué
  * estado está. Distingue el pedido que no existe (404) de los demás errores; con 401 llama a
  * `alVencerSesion`. Si falla la consulta de sucursales, llama a `alFallarSucursales`.
@@ -79,7 +80,7 @@ export function usarEditarPedido(
   opciones: { alFallarSucursales: () => void; alVencerSesion: () => void },
 ) {
   const formulario = usarFormularioPedido(opciones)
-  const { sucursal, modalidad, referencias, observaciones, renglones } = formulario
+  const { sucursal, modalidad, observaciones, renglones } = formulario
 
   const cargando = ref(true)
   const noEncontrado = ref(false)
@@ -95,7 +96,6 @@ export function usarEditarPedido(
     JSON.stringify([
       sucursal.value?.id ?? null,
       modalidad.value,
-      referencias.value.trim(),
       observaciones.value.trim(),
       renglones.value.map((renglon) => [renglon.producto.productoId, renglon.cantidadCapturada.trim()]),
     ]),
@@ -111,7 +111,6 @@ export function usarEditarPedido(
     idSucursalPedido = pedido.idSucursal
     formulario.cliente.value = clienteDelPedido(pedido.idCliente, clientes)
     modalidad.value = modalidadDePedido(pedido.idSucursal, entrega.modalidad)
-    referencias.value = entrega.referencias ?? ''
     observaciones.value = entrega.notas ?? ''
     renglones.value = pedido.lineas.map((linea) => renglonDeLinea(linea, inventario, usados))
   }

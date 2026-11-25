@@ -231,7 +231,6 @@ onBeforeRouteLeave((destino) => {
 
           <SeccionEntregaVue
             v-model:modalidad="pedido.modalidad"
-            v-model:referencias="pedido.referencias"
             v-model:observaciones="pedido.observaciones"
             class="editar-pedido__tarjeta"
             :sucursal="pedido.sucursal"

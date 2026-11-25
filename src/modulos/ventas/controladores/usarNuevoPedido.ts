@@ -13,7 +13,7 @@ import { registrarPedido } from '@/modulos/ventas/servicios/servicioPedidos'
  */
 export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
   const formulario = usarFormularioPedido(opciones)
-  const { cliente, renglones, modalidad, referencias, observaciones } = formulario
+  const { cliente, renglones, modalidad, observaciones } = formulario
 
   // Al cambiar de cliente se cargan sus sucursales (o se limpian si se quitó el cliente, también
   // al reiniciar el formulario).
@@ -24,7 +24,6 @@ export function usarNuevoPedido(opciones: { alFallarSucursales: () => void }) {
       cliente.value !== null ||
       renglones.value.length > 0 ||
       modalidad.value !== null ||
-      referencias.value.trim() !== '' ||
       observaciones.value.trim() !== '',
   )
 

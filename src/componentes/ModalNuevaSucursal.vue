@@ -16,11 +16,14 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'cerrar'): void
-  (e: 'guardar', datos: { nombreSucursal: string; direccion: string; telefono: string }): void
+  (e: 'guardar', datos: { nombreSucursal: string; direccion: string; referencias: string; telefono: string }): void
 }>()
 
 const nombreSucursal = ref('')
 const direccion = ref('')
+// Opcionales: entre calles, fachada o cómo identificar el lugar. En los pedidos a domicilio se
+// muestran junto a la dirección de entrega (ya no se capturan en cada pedido).
+const referencias = ref('')
 const telefono = ref('')
 const confirmacionDatos = ref(false)
 // La dirección es obligatoria: en los pedidos a domicilio es la dirección de entrega (ya no se
@@ -37,12 +40,14 @@ watch(() => props.sucursalEditar, (nuevaSucursal) => {
   if (nuevaSucursal) {
     nombreSucursal.value = nuevaSucursal.NombreSucursal || ''
     direccion.value = nuevaSucursal.Direccion || ''
+    referencias.value = nuevaSucursal.Referencias || ''
     telefono.value = nuevaSucursal.Telefono || ''
     confirmacionDatos.value = false 
     errorDireccion.value = ''
   } else {
     nombreSucursal.value = ''
     direccion.value = ''
+    referencias.value = ''
     telefono.value = ''
     confirmacionDatos.value = false
     errorDireccion.value = ''
@@ -58,6 +63,7 @@ const handleGuardar = () => {
   emit('guardar', {
     nombreSucursal: nombreSucursal.value,
     direccion: direccion.value.trim(),
+    referencias: referencias.value.trim(),
     telefono: telefono.value,
   })
   emit('cerrar')
@@ -81,6 +87,13 @@ const handleGuardar = () => {
               marcador="Calle, número, colonia y ciudad"
               obligatorio
               :error="errorDireccion"
+            />
+            <CampoTextoVue
+              id="sucursal-referencias"
+              v-model="referencias"
+              etiqueta="Referencias"
+              marcador="Entre calles, fachada o cómo identificar el lugar"
+              opcional
             />
             <CampoTextoVue id="sucursal-telefono" v-model="telefono" etiqueta="Teléfono" tipo="tel" marcador="Teléfono" />
 

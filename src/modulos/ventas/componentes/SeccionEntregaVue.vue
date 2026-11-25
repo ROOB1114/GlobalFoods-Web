@@ -1,12 +1,12 @@
 <script setup lang="ts">
-// Paso 3 del pedido: modalidad y, si es a domicilio, la dirección de entrega y las referencias (en
-// recolección, el punto donde el cliente recoge) y observaciones.
-// A domicilio, la dirección de entrega es siempre la registrada de la sucursal elegida: aquí solo
-// se muestra, con su enlace a Maps. Para cambiarla se edita la sucursal del cliente.
+// Paso 3 del pedido: modalidad y, si es a domicilio, la dirección de entrega (en recolección, el
+// punto donde el cliente recoge) y observaciones.
+// A domicilio, la dirección de entrega y sus referencias son las registradas de la sucursal
+// elegida: aquí solo se muestran, con el enlace a Maps. Para cambiarlas se edita la sucursal del
+// cliente.
 // No se capturan fecha de entrega ni método de pago: el pedido nace con método de pago pendiente
 // y ambos se llenan al registrar el pago, en el detalle del pedido o en el sistema interno.
 
-import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import { MODALIDADES, urlMapsDireccion } from '@/modulos/ventas/controladores/formatosPedido'
@@ -16,7 +16,7 @@ import type { SucursalCliente } from '@/modulos/ventas/interfaces/cliente'
 import type { ModalidadEntrega } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {
-  /** Sucursal elegida (null si aún no hay); a domicilio, su dirección registrada es la de entrega. */
+  /** Sucursal elegida (null si aún no hay); a domicilio, su dirección y referencias son las de entrega. */
   sucursal: SucursalCliente | null
   errores: {
     modalidad: string
@@ -27,7 +27,6 @@ interface Props {
 defineProps<Props>()
 
 const modalidad = defineModel<ModalidadEntrega | null>('modalidad', { required: true })
-const referencias = defineModel<string>('referencias', { required: true })
 const observaciones = defineModel<string>('observaciones', { required: true })
 
 const opciones = (Object.keys(MODALIDADES) as ModalidadEntrega[]).map((valor) => ({ valor, ...MODALIDADES[valor] }))
@@ -101,7 +100,7 @@ const ID_CONTADOR = `${IDS_CAMPOS.observaciones}-contador`
     </div>
 
     <template v-if="modalidad === 'domicilio'">
-      <!-- Solo lectura: la dirección registrada de la sucursal, como el punto de recolección. -->
+      <!-- Solo lectura: la dirección y referencias de la sucursal, como el punto de recolección. -->
       <div class="entrega__campo punto">
         <p class="entrega__etiqueta">Dirección de entrega</p>
         <p v-if="!sucursal" class="punto__aviso">Seleccione la sucursal del cliente para ver a dónde se entrega.</p>
@@ -109,6 +108,7 @@ const ID_CONTADOR = `${IDS_CAMPOS.observaciones}-contador`
           <div class="punto__textos">
             <p v-if="sucursal.direccion" class="punto__nombre">{{ sucursal.direccion }}</p>
             <p v-else class="punto__nombre punto__nombre--vacio">Sin dirección registrada</p>
+            <p v-if="sucursal.referencias" class="punto__referencias">Referencias: {{ sucursal.referencias }}</p>
             <p class="punto__sucursal">Sucursal {{ sucursal.nombre }}</p>
           </div>
           <a
@@ -125,19 +125,6 @@ const ID_CONTADOR = `${IDS_CAMPOS.observaciones}-contador`
         <p v-if="errores.direccion" :id="IDS_CAMPOS.errorDireccion" class="entrega__error" tabindex="-1">
           {{ errores.direccion }}
         </p>
-      </div>
-
-      <!-- CampoTextoVue pasa class al <input>; el margen va en un contenedor. -->
-      <div class="entrega__campo">
-        <CampoTextoVue
-          :id="IDS_CAMPOS.referencias"
-          v-model="referencias"
-          etiqueta="Referencias"
-          marcador="Entre calles, fachada o cómo identificar el lugar"
-          opcional
-          compacto
-          autocomplete="off"
-        />
       </div>
     </template>
 
@@ -326,6 +313,11 @@ const ID_CONTADOR = `${IDS_CAMPOS.observaciones}-contador`
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+.punto__referencias {
+  color: var(--gf-texto);
+  font-size: 13px;
 }
 
 .punto__nombre--vacio {

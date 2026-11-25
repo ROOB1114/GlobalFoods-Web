@@ -67,7 +67,6 @@ export const IDS_CAMPOS = {
   errorModalidad: 'pedido-modalidad-error',
   /** Aviso de sucursal sin dirección (a domicilio); recibe el foco si se intenta enviar así. */
   errorDireccion: 'pedido-direccion-error',
-  referencias: 'pedido-referencias',
   observaciones: 'pedido-observaciones',
 }
 
@@ -137,8 +136,8 @@ function cantidadValida(renglon: RenglonPedido): number | null {
  * inventario, cliente y sucursal, renglones, entrega, validaciones, totales y envío. Las vistas
  * solo lo pintan y reaccionan a sus resultados.
  * La sucursal solo se pide a domicilio; en recolección el pedido va con IdSucursal 0.
- * A domicilio, la dirección de entrega es siempre la registrada de la sucursal: no se captura
- * otra (la API no tiene dónde guardarla).
+ * A domicilio, la dirección de entrega y sus referencias son las registradas de la sucursal: no
+ * se capturan en el pedido (la API no tiene dónde guardarlas).
  * Aquí no se capturan fecha de entrega ni método de pago: se llenan al registrar el pago (en el
  * detalle del pedido o en el sistema interno).
  * Las sucursales no se cargan solas al cambiar el cliente: cada pantalla llama a
@@ -175,7 +174,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
   const sucursal = ref<SucursalCliente | null>(null)
   const renglones = ref<RenglonPedido[]>([])
   const modalidad = ref<ModalidadEntrega | null>(null)
-  const referencias = ref('')
   const observaciones = ref('')
 
   /** Los errores (salvo el de disponibilidad) se muestran a partir del primer intento de enviar. */
@@ -367,9 +365,9 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     // En recolección no se manda la sucursal elegida, así que tampoco se muestra.
     sucursal: modalidad.value === 'recoleccion' ? null : (sucursal.value?.nombre ?? null),
     modalidad: modalidad.value,
-    // A domicilio se entrega en la dirección registrada de la sucursal.
+    // A domicilio se entrega en la dirección registrada de la sucursal, con sus referencias.
     direccionEntrega: modalidad.value === 'domicilio' ? (sucursal.value?.direccion ?? '') : '',
-    referencias: referencias.value.trim(),
+    referencias: modalidad.value === 'domicilio' ? (sucursal.value?.referencias ?? '') : '',
     observaciones: observaciones.value.trim(),
     renglones: renglonesResumen.value,
     totalKg: totalKg.value,
@@ -404,8 +402,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
       clienteId: clienteActual.id,
       idSucursal,
       modalidad: modalidadActual,
-      // Opcionales: lo que se capture va como `Ref:` en Observaciones.
-      referencias: domicilio ? referencias.value.trim() || null : null,
       observaciones: observaciones.value.trim() || null,
       productos: renglones.value.map(aProductoRegistro),
       // Los totales salen del resumen, para que coincidan con lo que vio la asesora.
@@ -436,7 +432,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     cliente.value = crearClienteSesion()
     renglones.value = []
     modalidad.value = null
-    referencias.value = ''
     observaciones.value = ''
     intentoEnviar.value = false
     if (esCliente && cliente.value) cargarSucursales()
@@ -452,7 +447,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     errorSucursales,
     renglones,
     modalidad,
-    referencias,
     observaciones,
     enviando,
     errores,

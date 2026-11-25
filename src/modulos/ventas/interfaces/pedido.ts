@@ -59,12 +59,10 @@ export interface DatosRegistroPedido {
    */
   idSucursal: number
   /**
-   * No lleva dirección: a domicilio se entrega en la dirección registrada de la sucursal
-   * (IdSucursal), que es lo único que guarda la API.
+   * No lleva dirección ni referencias: a domicilio se entrega en la dirección registrada de la
+   * sucursal (IdSucursal), con sus referencias, que es lo único que guarda la API.
    */
   modalidad: ModalidadEntrega
-  /** null en recolección. */
-  referencias: string | null
   /** null si no se capturaron. */
   observaciones: string | null
   productos: ProductoRegistroPedido[]
@@ -133,6 +131,7 @@ export interface ResumenPedido {
   modalidad: ModalidadEntrega | null
   /** A domicilio, la dirección registrada de la sucursal; vacía si no tiene o en recolección. */
   direccionEntrega: string
+  /** A domicilio, las referencias registradas de la sucursal; vacías si no tiene o en recolección. */
   referencias: string
   observaciones: string
   renglones: RenglonResumen[]
