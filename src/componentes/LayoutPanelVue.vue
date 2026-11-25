@@ -1,10 +1,9 @@
 <script setup lang="ts">
-// Esqueleto común de todas las pantallas del panel:
-// encabezado arriba, barra lateral + contenido en una tarjeta en medio y pie abajo.
-
+import BannerCorteVue from '@/componentes/BannerCorteVue.vue'
 import BarraLateralVue, { type ItemNavegacion } from '@/componentes/BarraLateralVue.vue'
 import EncabezadoPanelVue from '@/componentes/EncabezadoPanelVue.vue'
 import PiePanelVue from '@/componentes/PiePanelVue.vue'
+// ...resto igual
 
 interface Props {
   titulo: string
@@ -27,6 +26,7 @@ withDefaults(defineProps<Props>(), {
       <BarraLateralVue :items="itemsNavegacion" :activo="itemActivo" />
 
       <main class="layout__contenido">
+        <BannerCorteVue />
         <slot />
       </main>
     </div>
