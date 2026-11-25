@@ -88,6 +88,7 @@ La base actual del sistema tiene estas rutas principales:
   - Las observaciones son opcionales, de máximo 250 caracteres.
 - Al registrar se valida todo y el foco va al primer error. Si todo es válido, se confirma el resumen antes de enviar.
 - El registro usa `POST /api/pedidos` y manda siempre `MetodoPago` en 0 (pendiente) y en `Fecha` el día en que se crea. A domicilio, `IdSucursal` es la sucursal elegida; en recolección va en 0. La modalidad viaja al inicio de `Observaciones` (`A domicilio · notas` o `Recolección en congeladora · notas`), porque la API no tiene campo para ella. Los pedidos anteriores traen además `Ref: …`; se siguen leyendo y, al editarlos, se conservan. El folio es `#` y el `Id` del pedido creado.
+- Al registrarse, el modal muestra el folio y una invitación a comunicarse con el asistente de Telegram para información sobre el pedido (enlace "Abrir en Telegram" a `https://t.me/GlobalFoodsMexicobot`, en otra pestaña; la dirección está en `asistente.ts`).
 
 ```mermaid
 flowchart TD
@@ -101,7 +102,7 @@ flowchart TD
     G -- Error --> H[Aviso: No fue posible registrar el pedido] --> B
     G -- "Sin conexión o 10 s sin respuesta" --> L[Aviso: No es posible conectar con el servidor] --> B
     G -- 401 --> M[Inicio de sesión: Su sesión expiró]
-    G -- Éxito --> I["Pedido #folio registrado correctamente"]
+    G -- Éxito --> I["Pedido #folio registrado correctamente + invitación al asistente de Telegram"]
     I -- Registrar otro pedido --> B
     I -- "Ir al inicio o Ir a Pedidos" --> A
     B -- Cancelar o salir con datos --> J{"¿Descartar el pedido?"}
