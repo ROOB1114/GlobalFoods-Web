@@ -136,8 +136,8 @@ function cantidadValida(renglon: RenglonPedido): number | null {
  * inventario, cliente y sucursal, renglones, entrega, validaciones, totales y envío. Las vistas
  * solo lo pintan y reaccionan a sus resultados.
  * La sucursal solo se pide a domicilio; en recolección el pedido va con IdSucursal 0.
- * A domicilio, la dirección de entrega y sus referencias son las registradas de la sucursal: no
- * se capturan en el pedido (la API no tiene dónde guardarlas).
+ * A domicilio, la dirección de entrega es siempre la registrada de la sucursal: no se captura
+ * otra (la API no tiene dónde guardarla).
  * Aquí no se capturan fecha de entrega ni método de pago: se llenan al registrar el pago (en el
  * detalle del pedido o en el sistema interno).
  * Las sucursales no se cargan solas al cambiar el cliente: cada pantalla llama a
@@ -365,9 +365,8 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     // En recolección no se manda la sucursal elegida, así que tampoco se muestra.
     sucursal: modalidad.value === 'recoleccion' ? null : (sucursal.value?.nombre ?? null),
     modalidad: modalidad.value,
-    // A domicilio se entrega en la dirección registrada de la sucursal, con sus referencias.
+    // A domicilio se entrega en la dirección registrada de la sucursal.
     direccionEntrega: modalidad.value === 'domicilio' ? (sucursal.value?.direccion ?? '') : '',
-    referencias: modalidad.value === 'domicilio' ? (sucursal.value?.referencias ?? '') : '',
     observaciones: observaciones.value.trim(),
     renglones: renglonesResumen.value,
     totalKg: totalKg.value,

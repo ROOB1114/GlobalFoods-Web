@@ -68,9 +68,8 @@ function clienteDelPedido(idCliente: number, activos: Cliente[]): Cliente {
 /**
  * Editar pedido (RF-PED-02): carga un pedido Pendiente en el formulario común
  * (usarFormularioPedido) y guarda los cambios con actualizarPedido(). Se pueden cambiar productos
- * y cantidades, modalidad, sucursal (a domicilio, su dirección y referencias registradas son las
- * de entrega) y observaciones; el cliente no. Las referencias que un pedido de antes traía en
- * Observaciones no se muestran aquí, pero se conservan al guardar (ver actualizarPedido()).
+ * y cantidades, modalidad, sucursal (a domicilio, su dirección registrada es la de entrega) y
+ * observaciones; el cliente no. Si un pedido de antes traía "Ref: …", aparece en las observaciones.
  * Si el pedido ya no está Pendiente, el formulario no se llena y `estadoNoEditable` dice en qué
  * estado está. Distingue el pedido que no existe (404) de los demás errores; con 401 llama a
  * `alVencerSesion`. Si falla la consulta de sucursales, llama a `alFallarSucursales`.

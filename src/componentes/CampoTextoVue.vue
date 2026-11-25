@@ -25,8 +25,6 @@ interface Props {
   error?: string
   /** Pinta un asterisco en la etiqueta y marca el input con aria-required. */
   obligatorio?: boolean
-  /** Agrega "(opcional)" en tono tenue después de la etiqueta. */
-  opcional?: boolean
   /** Etiqueta y texto más chicos, para formularios con muchos campos. */
   compacto?: boolean
   /**
@@ -43,7 +41,6 @@ const props = withDefaults(defineProps<Props>(), {
   deshabilitado: false,
   error: '',
   obligatorio: false,
-  opcional: false,
   compacto: false,
   ayuda: undefined,
 })
@@ -66,8 +63,7 @@ const descritoPor = computed(() => {
   <div class="campo" :class="{ 'campo--con-error': !!error, 'campo--compacto': compacto }">
     <div class="campo__cabecera">
       <label class="campo__etiqueta" :for="id">
-        {{ etiqueta }}<span v-if="obligatorio" class="campo__obligatorio" aria-hidden="true"> *</span
-        ><span v-else-if="opcional" class="campo__opcional"> (opcional)</span>
+        {{ etiqueta }}<span v-if="obligatorio" class="campo__obligatorio" aria-hidden="true"> *</span>
       </label>
       <!-- Hueco a la derecha de la etiqueta para un enlace o una acción. -->
       <slot name="accion" />
@@ -151,11 +147,6 @@ const descritoPor = computed(() => {
 
 .campo__obligatorio {
   color: var(--gf-cancelado-punto);
-}
-
-.campo__opcional {
-  color: var(--gf-texto-tenue);
-  font-weight: 400;
 }
 
 .campo__caja {

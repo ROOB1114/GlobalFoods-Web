@@ -42,7 +42,6 @@ Props opcionales:
 - `icono`: `usuario`, `candado` o `lupa`.
 - `error`: mensaje debajo del campo; agrega `aria-invalid` y lo enlaza con `aria-describedby`.
 - `obligatorio`: asterisco rojo en la etiqueta y `aria-required`.
-- `opcional`: agrega "(opcional)" en tono tenue después de la etiqueta (se ignora si también es `obligatorio`).
 - `compacto`: etiqueta de 14 px y texto de 15 px, para formularios con muchos campos.
 - `ayuda`: texto de apoyo debajo del campo, anunciado al cambiar (`aria-live`) y enlazado con `aria-describedby`. Pasa `''` para dejar lista la región aunque todavía no haya texto.
 

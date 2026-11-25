@@ -404,10 +404,6 @@ async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
               <dd>{{ consulta.pedido.usuarioTelegram ?? SIN_DATO }}</dd>
             </div>
             <div class="datos__dato datos__dato--ancho">
-              <dt>Referencias</dt>
-              <dd>{{ consulta.pedido.referencias ?? SIN_DATO }}</dd>
-            </div>
-            <div class="datos__dato datos__dato--ancho">
               <dt>Observaciones</dt>
               <dd :class="{ datos__notas: consulta.pedido.notas }">{{ consulta.pedido.notas ?? SIN_DATO }}</dd>
             </div>

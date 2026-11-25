@@ -19,9 +19,4 @@ export interface SucursalCliente {
   direccion: string | null
   /** null si no tiene teléfono registrado. */
   telefono: string | null
-  /**
-   * Entre calles, fachada o cómo identificar el lugar; null si no tiene. Se capturan al registrar
-   * la sucursal y se muestran junto a la dirección de entrega.
-   */
-  referencias: string | null
 }

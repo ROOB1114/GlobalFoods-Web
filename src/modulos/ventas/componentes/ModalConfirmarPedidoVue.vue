@@ -120,10 +120,6 @@ watch(
             <dt>Dirección</dt>
             <dd>{{ resumen.direccionEntrega }}</dd>
           </div>
-          <div v-if="resumen.referencias" class="confirmacion__dato confirmacion__dato--largo">
-            <dt>Referencias</dt>
-            <dd>{{ resumen.referencias }}</dd>
-          </div>
         </template>
         <div v-if="resumen.observaciones" class="confirmacion__dato confirmacion__dato--largo">
           <dt>Observaciones</dt>

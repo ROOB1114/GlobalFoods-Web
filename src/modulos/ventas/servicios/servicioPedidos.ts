@@ -8,7 +8,7 @@ import {
 } from '@/modulos/ventas/controladores/estadosPedido'
 import { fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
 import { METODO_PAGO, type MetodoPagoRegistro } from '@/modulos/ventas/controladores/metodosPago'
-import { armarObservaciones, leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+import { armarObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
 import { esSucursalRecoleccion } from '@/modulos/ventas/controladores/puntoRecoleccion'
 
 import type {
@@ -428,8 +428,8 @@ export async function registrarPago(id: number, metodoPago: MetodoPagoRegistro):
 }
 
 /**
- * Guarda los cambios de un pedido Pendiente: sucursal, totales, observaciones (con la modalidad
- * y, si el pedido ya las traía, sus referencias de antes; ver armarObservaciones()) y líneas. IdCliente, Fecha, Estatus, MetodoPago
+ * Guarda los cambios de un pedido Pendiente: sucursal, totales, observaciones (con la modalidad,
+ * ver armarObservaciones()) y líneas. IdCliente, Fecha, Estatus, MetodoPago
  * y la fecha de entrega se reenvían tal como llegaron. `datos.clienteId` no se usa: el cliente
  * de un pedido no cambia.
  *
@@ -456,7 +456,7 @@ export async function actualizarPedido(id: number, datos: DatosRegistroPedido): 
       IdSucursal: idSucursalParaApi(datos.idSucursal),
       TotalKG: datos.totalKg,
       Total: datos.total,
-      Observaciones: armarObservaciones(datos, leerObservaciones(actual.Observaciones ?? null).referencias),
+      Observaciones: armarObservaciones(datos),
       lineas: datos.productos.map(aLineaPedidoAPI),
     }),
   })
