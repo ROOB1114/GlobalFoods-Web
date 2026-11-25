@@ -1,9 +1,12 @@
 import type { DatosRegistroPedido, ModalidadEntrega } from '@/modulos/ventas/interfaces/pedido'
 
-// La API no tiene campos para modalidad ni referencias, así que Nuevo pedido los guarda al inicio
-// de Observaciones, seguidos de lo que capturó la asesora:
-//   "A domicilio · Ref: portón negro · Llamar antes de llegar"
+// La API no tiene campo para la modalidad, así que Nuevo pedido la guarda al inicio de
+// Observaciones, seguida de lo que capturó la asesora:
+//   "A domicilio · Llamar antes de llegar"
 //   "Recolección en congeladora · Pasa por la tarde"
+// Las referencias ya no se capturan en el pedido: son de la sucursal. Los pedidos anteriores (y los
+// de la app móvil) las traen como "Ref: …" después de la modalidad; se siguen leyendo y, al editar
+// uno de esos pedidos, se conservan.
 // armarObservaciones() escribe ese formato y leerObservaciones() lo lee; si cambia, se cambia aquí.
 //
 // La fecha de entrega ya no va en Observaciones: la API la regresa en su propio campo
@@ -33,11 +36,18 @@ export interface ObservacionesPedido {
   notas: string | null
 }
 
+/**
+ * `referenciasAnteriores`: las "Ref: …" que ya traía el pedido (solo al editar uno de antes), para
+ * no perderlas. Los pedidos nuevos no llevan.
+ */
 export function armarObservaciones(
-  datos: Pick<DatosRegistroPedido, 'modalidad' | 'referencias' | 'observaciones'>,
+  datos: Pick<DatosRegistroPedido, 'modalidad' | 'observaciones'>,
+  referenciasAnteriores: string | null = null,
 ): string {
   const partes = [MODALIDAD_EN_TEXTO[datos.modalidad]]
-  if (datos.modalidad === 'domicilio' && datos.referencias) partes.push(`${PREFIJO_REFERENCIAS}${datos.referencias}`)
+  if (datos.modalidad === 'domicilio' && referenciasAnteriores) {
+    partes.push(`${PREFIJO_REFERENCIAS}${referenciasAnteriores}`)
+  }
   if (datos.observaciones) partes.push(datos.observaciones)
   return partes.join(SEPARADOR)
 }

@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 
 import {
   obtenerCatalogoCliente,
@@ -42,8 +42,8 @@ export const MENSAJES = {
   productosRequeridos: 'Agregue al menos un producto al pedido.',
   cantidadInvalida: 'La cantidad debe ser mayor que cero.',
   modalidadRequerida: 'Seleccione la modalidad de entrega.',
-  direccionRequerida: 'Capture la dirección de entrega.',
-  referenciasRequeridas: 'Capture las referencias de la entrega.',
+  sucursalSinDireccion:
+    'La sucursal no tiene dirección registrada. Regístrela en las sucursales del cliente para entregar a domicilio.',
   inventarioNoDisponible: 'No es posible confirmar la disponibilidad en este momento.',
   errorBusquedaClientes: 'No fue posible consultar los clientes. Intente nuevamente.',
   errorSucursales: 'No fue posible consultar las sucursales. Intente nuevamente.',
@@ -65,8 +65,8 @@ export const IDS_CAMPOS = {
   errorProductos: 'pedido-productos-error',
   modalidad: 'pedido-modalidad-domicilio',
   errorModalidad: 'pedido-modalidad-error',
-  direccion: 'pedido-direccion',
-  referencias: 'pedido-referencias',
+  /** Aviso de sucursal sin dirección (a domicilio); recibe el foco si se intenta enviar así. */
+  errorDireccion: 'pedido-direccion-error',
   observaciones: 'pedido-observaciones',
 }
 
@@ -136,6 +136,8 @@ function cantidadValida(renglon: RenglonPedido): number | null {
  * inventario, cliente y sucursal, renglones, entrega, validaciones, totales y envío. Las vistas
  * solo lo pintan y reaccionan a sus resultados.
  * La sucursal solo se pide a domicilio; en recolección el pedido va con IdSucursal 0.
+ * A domicilio, la dirección de entrega y sus referencias son las registradas de la sucursal: no
+ * se capturan en el pedido (la API no tiene dónde guardarlas).
  * Aquí no se capturan fecha de entrega ni método de pago: se llenan al registrar el pago (en el
  * detalle del pedido o en el sistema interno).
  * Las sucursales no se cargan solas al cambiar el cliente: cada pantalla llama a
@@ -172,9 +174,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
   const sucursal = ref<SucursalCliente | null>(null)
   const renglones = ref<RenglonPedido[]>([])
   const modalidad = ref<ModalidadEntrega | null>(null)
-  const usarDireccionRegistrada = ref(false)
-  const direccionEntrega = ref('')
-  const referencias = ref('')
   const observaciones = ref('')
 
   /** Los errores (salvo el de disponibilidad) se muestran a partir del primer intento de enviar. */
@@ -227,21 +226,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
       if (numero === consultaSucursales) cargandoSucursales.value = false
     }
   }
-
-  // Al elegir una sucursal con dirección registrada, se propone esa dirección.
-  watch(sucursal, (nueva) => {
-    if (nueva?.direccion) {
-      usarDireccionRegistrada.value = true
-      direccionEntrega.value = nueva.direccion
-    } else if (usarDireccionRegistrada.value) {
-      usarDireccionRegistrada.value = false
-      direccionEntrega.value = ''
-    }
-  })
-
-  watch(usarDireccionRegistrada, (usar) => {
-    if (usar && sucursal.value?.direccion) direccionEntrega.value = sucursal.value.direccion
-  })
 
   // Renglones
 
@@ -297,8 +281,8 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
       sucursal: mensajeSucursal,
       productos: renglones.value.length > 0 ? '' : MENSAJES.productosRequeridos,
       modalidad: modalidad.value ? '' : MENSAJES.modalidadRequerida,
-      direccion: domicilio && !direccionEntrega.value.trim() ? MENSAJES.direccionRequerida : '',
-      referencias: domicilio && !referencias.value.trim() ? MENSAJES.referenciasRequeridas : '',
+      // Si falta la sucursal, ya lo dice su propio error; aquí solo la que no tiene dirección.
+      direccion: domicilio && sucursal.value && !sucursal.value.direccion ? MENSAJES.sucursalSinDireccion : '',
     }
   }
 
@@ -309,7 +293,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     productos: '',
     modalidad: '',
     direccion: '',
-    referencias: '',
   }
 
   const errores = computed<ErroresPedido>(() => (intentoEnviar.value ? calcularErrores() : SIN_ERRORES))
@@ -350,8 +333,7 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     const renglonConError = renglones.value.find((renglon) => erroresCantidad.value[renglon.producto.productoId])
     if (renglonConError) return idCampoCantidad(renglonConError.producto.productoId)
     if (encontrados.modalidad) return IDS_CAMPOS.modalidad
-    if (encontrados.direccion) return IDS_CAMPOS.direccion
-    if (encontrados.referencias) return IDS_CAMPOS.referencias
+    if (encontrados.direccion) return IDS_CAMPOS.errorDireccion
     return null
   }
 
@@ -383,8 +365,9 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     // En recolección no se manda la sucursal elegida, así que tampoco se muestra.
     sucursal: modalidad.value === 'recoleccion' ? null : (sucursal.value?.nombre ?? null),
     modalidad: modalidad.value,
-    direccionEntrega: direccionEntrega.value.trim(),
-    referencias: referencias.value.trim(),
+    // A domicilio se entrega en la dirección registrada de la sucursal, con sus referencias.
+    direccionEntrega: modalidad.value === 'domicilio' ? (sucursal.value?.direccion ?? '') : '',
+    referencias: modalidad.value === 'domicilio' ? (sucursal.value?.referencias ?? '') : '',
     observaciones: observaciones.value.trim(),
     renglones: renglonesResumen.value,
     totalKg: totalKg.value,
@@ -419,8 +402,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
       clienteId: clienteActual.id,
       idSucursal,
       modalidad: modalidadActual,
-      direccionEntrega: domicilio ? direccionEntrega.value.trim() : null,
-      referencias: domicilio ? referencias.value.trim() : null,
       observaciones: observaciones.value.trim() || null,
       productos: renglones.value.map(aProductoRegistro),
       // Los totales salen del resumen, para que coincidan con lo que vio la asesora.
@@ -451,9 +432,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     cliente.value = crearClienteSesion()
     renglones.value = []
     modalidad.value = null
-    usarDireccionRegistrada.value = false
-    direccionEntrega.value = ''
-    referencias.value = ''
     observaciones.value = ''
     intentoEnviar.value = false
     if (esCliente && cliente.value) cargarSucursales()
@@ -469,9 +447,6 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     errorSucursales,
     renglones,
     modalidad,
-    usarDireccionRegistrada,
-    direccionEntrega,
-    referencias,
     observaciones,
     enviando,
     errores,

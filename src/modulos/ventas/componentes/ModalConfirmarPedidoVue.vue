@@ -118,7 +118,7 @@ watch(
             <dt>Dirección</dt>
             <dd>{{ resumen.direccionEntrega }}</dd>
           </div>
-          <div class="confirmacion__dato confirmacion__dato--largo">
+          <div v-if="resumen.referencias" class="confirmacion__dato confirmacion__dato--largo">
             <dt>Referencias</dt>
             <dd>{{ resumen.referencias }}</dd>
           </div>
