@@ -57,6 +57,14 @@ export function inicialesCliente(nombre: string): string {
     .toUpperCase()
 }
 
+/**
+ * Enlace de Google Maps que busca una dirección (no hay coordenadas de las sucursales). Qué tan
+ * bien cae depende de que la dirección esté completa: calle, número, colonia y ciudad.
+ */
+export function urlMapsDireccion(direccion: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion.trim())}`
+}
+
 /** Minúsculas y sin acentos, para comparar sin importar cómo se escribió. */
 export function normalizarTexto(texto: string): string {
   return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()

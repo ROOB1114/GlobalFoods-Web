@@ -23,6 +23,15 @@ const nombreSucursal = ref('')
 const direccion = ref('')
 const telefono = ref('')
 const confirmacionDatos = ref(false)
+// La dirección es obligatoria: en los pedidos a domicilio es la dirección de entrega (ya no se
+// puede escribir otra al crear el pedido) y la que se busca con "Ver en Maps".
+const errorDireccion = ref('')
+const MENSAJE_DIRECCION = 'Capture la dirección completa: calle, número, colonia y ciudad.'
+
+// Se limpia al corregir la dirección y al volver a abrir el modal.
+watch([direccion, () => props.mostrar], () => {
+  errorDireccion.value = ''
+})
 
 watch(() => props.sucursalEditar, (nuevaSucursal) => {
   if (nuevaSucursal) {
@@ -30,18 +39,25 @@ watch(() => props.sucursalEditar, (nuevaSucursal) => {
     direccion.value = nuevaSucursal.Direccion || ''
     telefono.value = nuevaSucursal.Telefono || ''
     confirmacionDatos.value = false 
+    errorDireccion.value = ''
   } else {
     nombreSucursal.value = ''
     direccion.value = ''
     telefono.value = ''
     confirmacionDatos.value = false
+    errorDireccion.value = ''
   }
 }, { immediate: true })
 
 const handleGuardar = () => {
+  if (!direccion.value.trim()) {
+    errorDireccion.value = MENSAJE_DIRECCION
+    document.getElementById('sucursal-direccion')?.focus()
+    return
+  }
   emit('guardar', {
     nombreSucursal: nombreSucursal.value,
-    direccion: direccion.value,
+    direccion: direccion.value.trim(),
     telefono: telefono.value,
   })
   emit('cerrar')
@@ -58,7 +74,14 @@ const handleGuardar = () => {
         <div class="modal__caja">
           <form @submit.prevent="handleGuardar" class="modal__form">
             <CampoTextoVue id="sucursal-nombre" v-model="nombreSucursal" etiqueta="Nombre de Sucursal" marcador="Ej. Las Quintas" />
-            <CampoTextoVue id="sucursal-direccion" v-model="direccion" etiqueta="Dirección" marcador="Dirección completa" />
+            <CampoTextoVue
+              id="sucursal-direccion"
+              v-model="direccion"
+              etiqueta="Dirección"
+              marcador="Calle, número, colonia y ciudad"
+              obligatorio
+              :error="errorDireccion"
+            />
             <CampoTextoVue id="sucursal-telefono" v-model="telefono" etiqueta="Teléfono" tipo="tel" marcador="Teléfono" />
 
             <label class="modal__confirmacion">

@@ -58,13 +58,11 @@ export interface DatosRegistroPedido {
    * (ID_SUCURSAL_RECOLECCION, ver controladores/puntoRecoleccion.ts).
    */
   idSucursal: number
-  modalidad: ModalidadEntrega
   /**
-   * null en recolección.
-   * TODO: la API no tiene campo para la dirección de entrega y no se envía; el pedido solo
-   * lleva la sucursal (IdSucursal). Si la asesora escribe otra dirección, se pierde.
+   * No lleva dirección: a domicilio se entrega en la dirección registrada de la sucursal
+   * (IdSucursal), que es lo único que guarda la API.
    */
-  direccionEntrega: string | null
+  modalidad: ModalidadEntrega
   /** null en recolección. */
   referencias: string | null
   /** null si no se capturaron. */
@@ -133,6 +131,7 @@ export interface ResumenPedido {
   /** Nombre de la sucursal elegida; null si no hay o si es recolección (no lleva sucursal). */
   sucursal: string | null
   modalidad: ModalidadEntrega | null
+  /** A domicilio, la dirección registrada de la sucursal; vacía si no tiene o en recolección. */
   direccionEntrega: string
   referencias: string
   observaciones: string
