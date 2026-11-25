@@ -64,7 +64,7 @@ Los atributos que no son props (`autocomplete`, `min`, `readonly`, `role`, `aria
 ### IconoVue.vue
 Componente para renderizar iconos SVG con tamaño y color controlados por el texto actual o por clases CSS.
 
-Iconos disponibles: `inicio`, `pedidos`, `clientes`, `reportes`, `usuario`, `caja`, `reloj`, `engrane`, `salir`, `mas`, `menos`, `bolsa`, `lapiz`, `basura`, `candado`, `flecha-izquierda`, `lupa`, `camion`, `check`, `calendario`, `congeladora`, `cerrar`, `alerta`, `ojo`, `ojo-cerrado` y `mensaje`. Todos son de trazo, con `viewBox` de 24 y `currentColor`. Para agregar uno, suma su nombre a `NombreIcono` y su dibujo al template con el mismo estilo.
+Iconos disponibles: `inicio`, `pedidos`, `clientes`, `reportes`, `usuario`, `caja`, `reloj`, `engrane`, `salir`, `mas`, `menos`, `bolsa`, `lapiz`, `basura`, `candado`, `flecha-izquierda`, `lupa`, `camion`, `check`, `calendario`, `congeladora`, `cerrar`, `alerta`, `ojo`, `ojo-cerrado`, `mensaje` e `imagen`. Todos son de trazo, con `viewBox` de 24 y `currentColor`. Para agregar uno, suma su nombre a `NombreIcono` y su dibujo al template con el mismo estilo.
 
 ### ChipEstadoVue.vue
 Píldora de estado utilizada para mostrar estados como activo, inactivo, entregado, pendiente o cancelado.

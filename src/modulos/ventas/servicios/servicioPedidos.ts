@@ -7,8 +7,13 @@ import {
   sePuedeRegistrarPago,
 } from '@/modulos/ventas/controladores/estadosPedido'
 import { fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
-import { METODO_PAGO, type MetodoPagoRegistro } from '@/modulos/ventas/controladores/metodosPago'
-import { armarObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
+import { METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
+import { armarObservaciones, reemplazarNotas } from '@/modulos/ventas/controladores/observacionesPedido'
+import {
+  MENSAJE_MIXTO_PENDIENTE,
+  metodoPagoDelPedido,
+  type PagoEntrega,
+} from '@/modulos/ventas/controladores/pagoEntrega'
 import { esSucursalRecoleccion } from '@/modulos/ventas/controladores/puntoRecoleccion'
 
 import type {
@@ -398,18 +403,35 @@ export async function cancelarPedido(id: number): Promise<void> {
 
 /**
  * Registra el pago de un pedido surtido o en reparto: lo vuelve a mandar como está, pero
- * Entregado (Estatus 4), con el método de pago elegido y con la fecha de entrega de hoy.
- * Igual que al cancelar, primero lo consulta para reenviar sus datos actuales y para no
- * registrar el pago de uno que ya cambió de estado.
+ * Entregado (Estatus 4), con el método de pago y con la fecha de entrega de hoy. Si `notas` no es
+ * null, también cambia el texto libre de Observaciones (conserva la modalidad que va antes; ver
+ * reemplazarNotas()). Igual que al cancelar, primero lo consulta para reenviar sus datos actuales
+ * y para no registrar el pago de uno que ya cambió de estado.
  *
  *   GET /api/pedidos/:id                → el pedido actual
- *   PUT /api/pedidos/:id                → el mismo pedido con Estatus 4, MetodoPago y FechaEntrega
+ *   PUT /api/pedidos/:id                → el mismo pedido con Estatus 4, MetodoPago, FechaEntrega
+ *                                         y, si cambiaron, Observaciones
  *   Authorization: Bearer <token>
  *
- * Si ya no está en Surtido ni En reparto, lanza ErrorPedidos "datos_invalidos" con el mensaje
- * para la vista.
+ * Efectivo o tarjeta solos van en MetodoPago (1 o 2). El pago mixto se rechaza por ahora.
+ * TODO: cuando la API tenga la tabla PagoPedidosApp (TipoPago 0 pendiente, 1 efectivo, 2 tarjeta,
+ * 3 mixto), guardar ahí `pago` con sus montos y activar PAGO_MIXTO_DISPONIBLE en pagoEntrega.ts.
+ * TODO: `comprobante` (foto del recibo firmado, opcional) todavía no se envía: la API no puede
+ * recibir fotos. Cuando César defina cómo (endpoint, formato, tamaño máximo), enviarlo aquí y
+ * activar COMPROBANTE_DISPONIBLE en pagoEntrega.ts.
+ *
+ * Si ya no está en Surtido ni En reparto, o el pago es mixto, lanza ErrorPedidos
+ * "datos_invalidos" con el mensaje para la vista.
  */
-export async function registrarPago(id: number, metodoPago: MetodoPagoRegistro): Promise<void> {
+export async function registrarPago(
+  id: number,
+  pago: PagoEntrega,
+  notas: string | null = null,
+  comprobante: File | null = null,
+): Promise<void> {
+  const metodoPago = metodoPagoDelPedido(pago.tipo)
+  if (metodoPago === null) throw rechazo(MENSAJE_MIXTO_PENDIENTE)
+
   const actual = await consultarPedido(id)
 
   const estatus = aNumero(actual.Estatus)
@@ -423,6 +445,7 @@ export async function registrarPago(id: number, metodoPago: MetodoPagoRegistro):
       Estatus: ESTATUS.completado,
       MetodoPago: metodoPago,
       entrega: fechaHoyEntero(),
+      ...(notas === null ? {} : { Observaciones: reemplazarNotas(actual.Observaciones ?? null, notas) }),
     }),
   })
 }
