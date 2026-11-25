@@ -115,7 +115,8 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
       telefonoSucursal: sucursal?.telefono ?? null,
       modalidad,
       fechaEntrega: actual.fechaEntrega,
-      referencias: entrega.referencias,
+      // Las "Ref:" de los pedidos de antes; si no trae, las registradas de la sucursal.
+      referencias: modalidad === 'recoleccion' ? null : (entrega.referencias ?? sucursal?.referencias ?? null),
       notas: entrega.notas,
       metodoPago: textoMetodoPago(actual.metodoPago),
       lineas: actual.lineas,

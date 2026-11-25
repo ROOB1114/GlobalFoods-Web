@@ -31,7 +31,13 @@ import {
   sePuedeEditar,
   sePuedeRegistrarPago,
 } from '@/modulos/ventas/controladores/estadosPedido'
-import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
+import {
+  MODALIDADES,
+  formatearFecha,
+  formatearKg,
+  formatearMoneda,
+  urlMapsDireccion,
+} from '@/modulos/ventas/controladores/formatosPedido'
 import type { MetodoPagoRegistro } from '@/modulos/ventas/controladores/metodosPago'
 import {
   perfilPuedeCancelar,
@@ -350,7 +356,20 @@ async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
             </div>
             <div v-else class="datos__dato">
               <dt>Dirección de entrega</dt>
-              <dd>{{ consulta.pedido.direccionEntrega ?? SIN_DATO }}</dd>
+              <dd>
+                <template v-if="consulta.pedido.direccionEntrega">
+                  {{ consulta.pedido.direccionEntrega }}
+                  <a
+                    class="detalle__enlace datos__mapa"
+                    :href="urlMapsDireccion(consulta.pedido.direccionEntrega)"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    Ver en Maps<span class="visualmente-oculto"> (se abre en otra pestaña)</span>
+                  </a>
+                </template>
+                <template v-else>{{ SIN_DATO }}</template>
+              </dd>
             </div>
             <div class="datos__dato">
               <dt>Teléfono de la sucursal</dt>

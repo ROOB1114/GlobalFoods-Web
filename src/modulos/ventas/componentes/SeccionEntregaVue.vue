@@ -1,33 +1,32 @@
 <script setup lang="ts">
-// Paso 3 del pedido: modalidad y, si es a domicilio, dirección y referencias (en recolección, el
+// Paso 3 del pedido: modalidad y, si es a domicilio, la dirección de entrega (en recolección, el
 // punto donde el cliente recoge) y observaciones.
+// A domicilio, la dirección de entrega y sus referencias son las registradas de la sucursal
+// elegida: aquí solo se muestran, con el enlace a Maps. Para cambiarlas se edita la sucursal del
+// cliente.
 // No se capturan fecha de entrega ni método de pago: el pedido nace con método de pago pendiente
 // y ambos se llenan al registrar el pago, en el detalle del pedido o en el sistema interno.
 
-import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
-import { MODALIDADES } from '@/modulos/ventas/controladores/formatosPedido'
+import { MODALIDADES, urlMapsDireccion } from '@/modulos/ventas/controladores/formatosPedido'
 import { PUNTO_RECOLECCION } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { IDS_CAMPOS, MAXIMO_OBSERVACIONES } from '@/modulos/ventas/controladores/usarFormularioPedido'
+import type { SucursalCliente } from '@/modulos/ventas/interfaces/cliente'
 import type { ModalidadEntrega } from '@/modulos/ventas/interfaces/pedido'
 
 interface Props {
-  /** Dirección registrada de la sucursal elegida; habilita la casilla "Usar la dirección registrada". */
-  direccionSucursal: string | null
+  /** Sucursal elegida (null si aún no hay); a domicilio, su dirección y referencias son las de entrega. */
+  sucursal: SucursalCliente | null
   errores: {
     modalidad: string
     direccion: string
-    referencias: string
   }
 }
 
 defineProps<Props>()
 
 const modalidad = defineModel<ModalidadEntrega | null>('modalidad', { required: true })
-const usarDireccionRegistrada = defineModel<boolean>('usarDireccionRegistrada', { required: true })
-const direccionEntrega = defineModel<string>('direccionEntrega', { required: true })
-const referencias = defineModel<string>('referencias', { required: true })
 const observaciones = defineModel<string>('observaciones', { required: true })
 
 const opciones = (Object.keys(MODALIDADES) as ModalidadEntrega[]).map((valor) => ({ valor, ...MODALIDADES[valor] }))
@@ -101,42 +100,31 @@ const ID_CONTADOR = `${IDS_CAMPOS.observaciones}-contador`
     </div>
 
     <template v-if="modalidad === 'domicilio'">
-      <!-- CampoTextoVue pasa class al <input>; el margen va en un contenedor. -->
-      <div class="entrega__campo">
-        <CampoTextoVue
-          :id="IDS_CAMPOS.direccion"
-          v-model="direccionEntrega"
-          etiqueta="Dirección de entrega"
-          marcador="Calle, número, colonia y ciudad"
-          obligatorio
-          compacto
-          autocomplete="off"
-          :readonly="usarDireccionRegistrada"
-          :error="errores.direccion"
-        />
-      </div>
-
-      <label class="entrega__casilla" :class="{ 'entrega__casilla--deshabilitada': !direccionSucursal }">
-        <input
-          v-model="usarDireccionRegistrada"
-          type="checkbox"
-          :disabled="!direccionSucursal"
-          :aria-controls="IDS_CAMPOS.direccion"
-        />
-        Usar la dirección registrada de la sucursal
-      </label>
-
-      <div class="entrega__campo">
-        <CampoTextoVue
-          :id="IDS_CAMPOS.referencias"
-          v-model="referencias"
-          etiqueta="Referencias"
-          marcador="Entre calles, fachada o cómo identificar el lugar"
-          obligatorio
-          compacto
-          autocomplete="off"
-          :error="errores.referencias"
-        />
+      <!-- Solo lectura: la dirección y referencias de la sucursal, como el punto de recolección. -->
+      <div class="entrega__campo punto">
+        <p class="entrega__etiqueta">Dirección de entrega</p>
+        <p v-if="!sucursal" class="punto__aviso">Seleccione la sucursal del cliente para ver a dónde se entrega.</p>
+        <div v-else class="punto__detalle" :class="{ 'punto__detalle--con-error': !!errores.direccion }">
+          <div class="punto__textos">
+            <p v-if="sucursal.direccion" class="punto__nombre">{{ sucursal.direccion }}</p>
+            <p v-else class="punto__nombre punto__nombre--vacio">Sin dirección registrada</p>
+            <p v-if="sucursal.referencias" class="punto__referencias">Referencias: {{ sucursal.referencias }}</p>
+            <p class="punto__sucursal">Sucursal {{ sucursal.nombre }}</p>
+          </div>
+          <a
+            v-if="sucursal.direccion"
+            class="punto__enlace"
+            :href="urlMapsDireccion(sucursal.direccion)"
+            target="_blank"
+            rel="noopener"
+          >
+            Ver en Maps<span class="visualmente-oculto"> (se abre en otra pestaña)</span>
+          </a>
+        </div>
+        <!-- Recibe el foco si se intenta registrar con una sucursal sin dirección. -->
+        <p v-if="errores.direccion" :id="IDS_CAMPOS.errorDireccion" class="entrega__error" tabindex="-1">
+          {{ errores.direccion }}
+        </p>
       </div>
     </template>
 
@@ -316,26 +304,35 @@ const ID_CONTADOR = `${IDS_CAMPOS.observaciones}-contador`
   outline-offset: 2px;
 }
 
-.entrega__casilla {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+.punto__detalle--con-error {
+  border-color: var(--gf-cancelado-punto);
+}
+
+.punto__textos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.punto__referencias {
   color: var(--gf-texto);
   font-size: 13px;
-  cursor: pointer;
 }
 
-.entrega__casilla input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--gf-secundario);
-}
-
-.entrega__casilla--deshabilitada {
+.punto__nombre--vacio {
   color: var(--gf-texto-tenue);
-  cursor: not-allowed;
+  font-weight: 500;
+}
+
+.punto__sucursal,
+.punto__aviso {
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
+}
+
+.punto__aviso {
+  font-size: 13px;
 }
 
 .entrega__campo {
