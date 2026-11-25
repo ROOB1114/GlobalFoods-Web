@@ -44,33 +44,33 @@ export function armarObservaciones(datos: Pick<DatosRegistroPedido, 'modalidad' 
   return partes.join(SEPARADOR)
 }
 
-/**
- * Separa los datos de entrega de las notas. Si el texto no empieza con una modalidad (p. ej. un
- * pedido capturado en el sistema interno), regresa todo null y el texto completo como notas.
- * Si después de la modalidad viene "Entrega dd/mm/aaaa" (pedidos anteriores y de la app), se
- * ignora. Las "Ref: …" de los pedidos de antes se quedan al inicio de las notas.
- */
-export function leerObservaciones(texto: string | null): ObservacionesPedido {
+/** Partes del texto de Observaciones; `fecha` y `parteDireccion` van tal como están escritas. */
+interface PartesObservaciones {
+  modalidad: ModalidadEntrega | null
+  fecha: string | null
+  parteDireccion: string | null
+  notas: string
+}
+
+function separar(texto: string | null): PartesObservaciones {
   const completo = texto?.trim() ?? ''
   const [primera = '', ...resto] = completo.split(SEPARADOR)
   const modalidad = (Object.keys(MODALIDAD_EN_TEXTO) as ModalidadEntrega[]).find(
     (clave) => MODALIDAD_EN_TEXTO[clave] === primera,
   )
 
-  if (!modalidad) {
-    return { modalidad: null, direccion: null, notas: completo || null }
-  }
+  if (!modalidad) return { modalidad: null, fecha: null, parteDireccion: null, notas: completo }
 
-  if (FECHA_ENTREGA_ANTERIOR.test(resto[0] ?? '')) resto.shift()
+  const fecha = FECHA_ENTREGA_ANTERIOR.test(resto[0] ?? '') ? (resto.shift() ?? null) : null
 
   // Dirección y "Ref: …" solo van a domicilio, en cualquier orden, antes de las notas. La
   // dirección se separa; las referencias se quedan como texto al inicio de las notas.
-  let direccion: string | null = null
+  let parteDireccion: string | null = null
   const referenciasAnteriores: string[] = []
   while (modalidad === 'domicilio' && resto.length > 0) {
     const parte = resto[0] ?? ''
-    if (direccion === null && parte.startsWith(PREFIJO_DIRECCION)) {
-      direccion = parte.slice(PREFIJO_DIRECCION.length).trim()
+    if (parteDireccion === null && parte.startsWith(PREFIJO_DIRECCION)) {
+      parteDireccion = parte
     } else if (parte.startsWith(PREFIJO_REFERENCIAS)) {
       referenciasAnteriores.push(parte)
     } else {
@@ -79,9 +79,35 @@ export function leerObservaciones(texto: string | null): ObservacionesPedido {
     resto.shift()
   }
 
+  return { modalidad, fecha, parteDireccion, notas: [...referenciasAnteriores, ...resto].join(SEPARADOR).trim() }
+}
+
+/**
+ * Separa los datos de entrega de las notas. Si el texto no empieza con una modalidad (p. ej. un
+ * pedido capturado en el sistema interno), regresa todo null y el texto completo como notas.
+ * Si después de la modalidad viene "Entrega dd/mm/aaaa" (pedidos anteriores y de la app), se
+ * ignora. Las "Ref: …" de los pedidos de antes se quedan al inicio de las notas.
+ */
+export function leerObservaciones(texto: string | null): ObservacionesPedido {
+  const partes = separar(texto)
   return {
-    modalidad,
-    direccion: direccion || null,
-    notas: [...referenciasAnteriores, ...resto].join(SEPARADOR).trim() || null,
+    modalidad: partes.modalidad,
+    direccion: partes.parteDireccion?.slice(PREFIJO_DIRECCION.length).trim() || null,
+    notas: partes.notas || null,
   }
+}
+
+/**
+ * Cambia solo las notas (lo que leerObservaciones() da como `notas`) y conserva lo que va antes:
+ * la modalidad, "Entrega dd/mm/aaaa" y "Dir: …" de los pedidos de la app. Si el texto no empieza
+ * con una modalidad, las notas son todo el texto y se reemplaza completo. Se usa al registrar el
+ * pago, donde se pueden agregar observaciones (p. ej. una entrega parcial).
+ */
+export function reemplazarNotas(texto: string | null, notas: string): string {
+  const partes = separar(texto)
+  const nuevas = notas.trim()
+  if (!partes.modalidad) return nuevas
+  return [MODALIDAD_EN_TEXTO[partes.modalidad], partes.fecha, partes.parteDireccion, nuevas || null]
+    .filter((parte): parte is string => !!parte)
+    .join(SEPARADOR)
 }

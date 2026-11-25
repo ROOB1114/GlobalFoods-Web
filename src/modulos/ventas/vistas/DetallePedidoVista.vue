@@ -38,7 +38,7 @@ import {
   formatearMoneda,
   urlMapsDireccion,
 } from '@/modulos/ventas/controladores/formatosPedido'
-import type { MetodoPagoRegistro } from '@/modulos/ventas/controladores/metodosPago'
+import type { PagoEntrega } from '@/modulos/ventas/controladores/pagoEntrega'
 import {
   perfilPuedeCancelar,
   perfilPuedeEditar,
@@ -240,10 +240,10 @@ async function alConfirmarCancelacion() {
   }
 }
 
-async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
+async function alConfirmarPago(pago: PagoEntrega, notas: string | null, comprobante: File | null) {
   registrandoPago.value = true
   try {
-    await registrarPago(id, metodoPago)
+    await registrarPago(id, pago, notas, comprobante)
     mostrarPago.value = false
     avisar(MENSAJES_PAGO.exito(folio), 'exito')
     await consulta.cargar({ silencioso: true })
@@ -448,6 +448,7 @@ async function alConfirmarPago(metodoPago: MetodoPagoRegistro) {
     :mostrar="mostrarPago"
     :folio="folio"
     :total="consulta.pedido?.total ?? 0"
+    :notas="consulta.pedido?.notas ?? ''"
     :enviando="registrandoPago"
     @cerrar="mostrarPago = false"
     @confirmar="alConfirmarPago"
