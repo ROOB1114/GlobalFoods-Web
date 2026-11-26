@@ -6,12 +6,13 @@ import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
 import { esSucursalRecoleccion, modalidadDePedido } from '@/modulos/ventas/controladores/puntoRecoleccion'
 import { usarDirectorioPedidos } from '@/modulos/ventas/controladores/usarDirectorioPedidos'
-import type { LineaPedido, ModalidadEntrega, Pedido } from '@/modulos/ventas/interfaces/pedido'
+import type { EventoPedido, LineaPedido, ModalidadEntrega, Pedido } from '@/modulos/ventas/interfaces/pedido'
 import { ErrorPedidos, obtenerPedidoPorId } from '@/modulos/ventas/servicios/servicioPedidos'
 
 export const MENSAJES_DETALLE = {
   cargando: 'Cargando pedido…',
-  errorCarga: 'No fue posible consultar el pedido. Intente nuevamente.',
+  sinPermiso: 'No tiene permiso para consultar este pedido.',
+  errorCarga: 'No fue posible consultar el historial. Intente nuevamente.',
 }
 
 export function mensajeNoEncontrado(id: number): string {
@@ -41,38 +42,31 @@ export interface DetallePedido {
   /** "Pendiente", "Efectivo" o "Crédito o transferencia"; null si la API no lo trae. */
   metodoPago: string | null
   lineas: LineaPedido[]
+  eventos: EventoPedido[]
   totalKg: number
   total: number
 }
 
-/**
- * Consulta de un pedido para su detalle, con los nombres de cliente y sucursal. Distingue el
- * pedido que no existe (404) de los demás errores; con 401 llama a `alVencerSesion`.
- */
 export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => void }) {
   const encontrado = shallowRef<Pedido | null>(null)
   const cargando = ref(true)
   const noEncontrado = ref(false)
+  const sinPermiso = ref(false)
   const errorCarga = ref(false)
   const directorio = usarDirectorioPedidos()
 
-  /**
-   * Pide el pedido a la API. Con `silencioso` (la actualización de cada minuto, o después de
-   * cancelar o registrar el pago) se sigue viendo el pedido mientras llega la respuesta y, si
-   * falla, se queda como estaba. Si ya hay una carga visible en curso, la silenciosa no hace nada.
-   */
   async function cargar(opcionesCarga: { silencioso?: boolean } = {}) {
     const silencioso = opcionesCarga.silencioso === true
     if (silencioso && cargando.value) return
     if (!silencioso) {
       cargando.value = true
       noEncontrado.value = false
+      sinPermiso.value = false
       errorCarga.value = false
     }
     try {
       const [pedido] = await Promise.all([obtenerPedidoPorId(id), directorio.cargarClientes()])
       await Promise.all([
-        // Recolección (IdSucursal 0) no tiene sucursal que buscar.
         esSucursalRecoleccion(pedido.idSucursal) ? undefined : directorio.cargarSucursales([pedido.idCliente]),
         directorio.cargarTelegram(pedido.idCliente),
       ])
@@ -85,6 +79,7 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
       }
       if (silencioso) return
       if (motivo === 'no_encontrado') noEncontrado.value = true
+      else if (motivo === 'sin_permiso') sinPermiso.value = true
       else errorCarga.value = true
     } finally {
       if (!silencioso) cargando.value = false
@@ -99,7 +94,6 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
     const sinSucursal = esSucursalRecoleccion(actual.idSucursal)
     const sucursal = sinSucursal ? null : directorio.buscarSucursal(actual.idCliente, actual.idSucursal)
     const modalidad = modalidadDePedido(actual.idSucursal, entrega.modalidad)
-    // La de "Dir:" si viene en Observaciones; si no, la de la sucursal. En recolección no hay entrega.
     const direccionEntrega =
       modalidad === 'recoleccion' ? null : (entrega.direccion ?? sucursal?.direccion ?? null)
 
@@ -117,10 +111,11 @@ export function usarDetallePedido(id: number, opciones: { alVencerSesion: () => 
       notas: entrega.notas,
       metodoPago: textoMetodoPago(actual.metodoPago),
       lineas: actual.lineas,
+      eventos: [...actual.eventos].sort((a, b) => a.fechaHora.localeCompare(b.fechaHora) || a.id - b.id),
       totalKg: actual.totalKg,
       total: actual.total,
     }
   })
 
-  return { cargando, noEncontrado, errorCarga, pedido, cargar }
+  return { cargando, noEncontrado, sinPermiso, errorCarga, pedido, cargar }
 }

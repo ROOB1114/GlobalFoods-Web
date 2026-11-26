@@ -101,6 +101,7 @@ export interface Pedido {
   /** Texto tal como viene; leerObservaciones() separa los datos de entrega de las notas. */
   observaciones: string
   lineas: LineaPedido[]
+  eventos: EventoPedido[]
 }
 
 /** Producto dentro de un pedido registrado. */
@@ -135,4 +136,18 @@ export interface ResumenPedido {
   renglones: RenglonResumen[]
   totalKg: number
   total: number
+}
+
+export interface EventoPedido {
+  id: number
+  fechaHora: string
+  usuario: string
+  perfil: string
+  accion: string
+  estadoAnterior: number | null
+  estadoResultante: number | null
+  valorAnterior: string | null
+  valorNuevo: string | null
+  motivo: string | null
+  origen: string
 }

@@ -18,6 +18,7 @@ import { esSucursalRecoleccion } from '@/modulos/ventas/controladores/puntoRecol
 
 import type {
   DatosRegistroPedido,
+  EventoPedido,
   LineaPedido,
   Pedido,
   ProductoRegistroPedido,
@@ -54,6 +55,20 @@ interface LineaPedidoAPI {
   Subtotal: number
 }
 
+interface EventoConsultadoAPI {
+  Id: number
+  FechaHora: string
+  UsuarioNombre: string
+  Perfil: string
+  Accion: string
+  EstadoAnterior: number | null
+  EstadoResultante: number | null
+  ValorAnterior: string | null
+  ValorNuevo: string | null
+  Motivo: string | null
+  Origen: string
+}
+
 /** Pedido tal como llega de GET /api/pedidos y GET /api/pedidos/:id. */
 interface PedidoConsultadoAPI {
   Id: number
@@ -66,15 +81,11 @@ interface PedidoConsultadoAPI {
   Estatus: number
   /** Puede no venir si la API todavía no lo regresa. */
   MetodoPago?: number | null
-  /**
-   * Fecha de entrega como entero aaaammdd; se llena al registrar el pago (en la web o en el
-   * sistema interno). Es opcional: null o 0 = sin fecha. El backend confirmó el nombre
-   * FechaEntrega; "fechaEntrega" se sigue leyendo por compatibilidad.
-   */
   FechaEntrega?: number | null
   fechaEntrega?: number | null
   Observaciones: string | null
   lineas?: LineaConsultadaAPI[]
+  eventos?: EventoConsultadoAPI[]
 }
 
 /** Nombres con los que puede llegar la fecha de entrega; el primero es el confirmado. */
@@ -113,11 +124,13 @@ interface CambiosPedidoAPI
   entrega?: number
 }
 
-/**
- * Por qué falló una petición de pedidos; la vista elige el mensaje según el motivo.
- * "datos_invalidos" es un 400: la API rechazó lo que se le mandó.
- */
-export type MotivoErrorPedidos = 'sesion' | 'conexion' | 'no_encontrado' | 'datos_invalidos' | 'api'
+export type MotivoErrorPedidos =
+  | 'sesion'
+  | 'sin_permiso'
+  | 'conexion'
+  | 'no_encontrado'
+  | 'datos_invalidos'
+  | 'api'
 
 export class ErrorPedidos extends Error {
   readonly motivo: MotivoErrorPedidos
@@ -137,13 +150,6 @@ function mensajeDeError(datos: unknown): string {
   return datos && typeof datos === 'object' && 'error' in datos && typeof datos.error === 'string' ? datos.error : ''
 }
 
-/**
- * Petición a la API de pedidos con el token de la sesión; regresa el JSON de la respuesta.
- * Lanza ErrorPedidos con motivo "sesion" si no hay sesión o la API responde 401, "conexion" si no
- * hay conexión o pasan 10 s sin respuesta, "no_encontrado" con 404, "datos_invalidos" con 400 y
- * "api" con cualquier otro error. Si la API manda `{ error }`, queda en `mensajeApi`.
- * `accion` completa los mensajes: "registrar el pedido", "consultar los pedidos".
- */
 async function solicitar(
   ruta: string,
   accion: string,
@@ -181,11 +187,18 @@ async function solicitar(
     throw new ErrorPedidos('sesion', mensajeApi || 'La sesión expiró.', mensajeApi)
   }
 
+  if (respuestaHttp.status === 403) {
+    throw new ErrorPedidos(
+      'sin_permiso',
+      mensajeApi || 'No tiene permiso para consultar este pedido.',
+      mensajeApi,
+    )
+  }
+
   if (respuestaHttp.status === 404) {
     throw new ErrorPedidos('no_encontrado', mensajeApi || 'No se encontró el pedido.', mensajeApi)
   }
 
-  // 409: la API no permite el cambio, p. ej. el pedido ya cambió de estado.
   if (respuestaHttp.status === 400 || respuestaHttp.status === 409) {
     throw new ErrorPedidos('datos_invalidos', mensajeApi || `No se pudo ${accion}.`, mensajeApi)
   }
@@ -197,7 +210,6 @@ async function solicitar(
   return datosRespuesta
 }
 
-/** Fecha de hoy como entero aaaammdd, p. ej. 20261027. */
 function fechaHoyEntero(): number {
   return Number(fechaHoyIso().replace(/-/g, ''))
 }
@@ -212,10 +224,6 @@ function aLineaPedidoAPI(producto: ProductoRegistroPedido): LineaPedidoAPI {
   }
 }
 
-/**
- * IdSucursal como lo pide la API: null en recolección. En la web la recolección se maneja como 0
- * (ver puntoRecoleccion.ts), pero la API responde "IdSucursal debe ser un entero positivo o null".
- */
 function idSucursalParaApi(idSucursal: number): number | null {
   return esSucursalRecoleccion(idSucursal) ? null : idSucursal
 }
@@ -234,19 +242,16 @@ function aPedidoAPI(datos: DatosRegistroPedido): PedidoAPI {
   }
 }
 
-/** Número de la API (puede llegar como texto, p. ej. un decimal); 0 si no es un número. */
 function aNumero(valor: unknown): number {
   const numero = Number(valor)
   return Number.isFinite(numero) ? numero : 0
 }
 
-/** 20261027 → "2026-10-27"; vacío si no es una fecha aaaammdd (también con null, 0 o sin valor). */
 function fechaIsoDeEntero(fecha: unknown): string {
   const texto = String(fecha)
   return /^\d{8}$/.test(texto) ? `${texto.slice(0, 4)}-${texto.slice(4, 6)}-${texto.slice(6, 8)}` : ''
 }
 
-/** Fecha de entrega como aaaa-mm-dd, venga como "FechaEntrega" o "fechaEntrega"; null si no trae. */
 function fechaEntregaDe(pedido: PedidoConsultadoAPI): string | null {
   for (const campo of CAMPOS_FECHA_ENTREGA) {
     const fecha = fechaIsoDeEntero(pedido[campo])
@@ -255,10 +260,6 @@ function fechaEntregaDe(pedido: PedidoConsultadoAPI): string | null {
   return null
 }
 
-/**
- * La fecha de entrega tal como llegó y con el mismo nombre, para reenviarla sin cambios.
- * Vacío si la API no la trae o viene null (igual que MetodoPago).
- */
 function camposFechaEntrega(pedido: PedidoConsultadoAPI): Partial<Record<CampoFechaEntrega, number>> {
   const campos: Partial<Record<CampoFechaEntrega, number>> = {}
   for (const campo of CAMPOS_FECHA_ENTREGA) {
@@ -268,21 +269,14 @@ function camposFechaEntrega(pedido: PedidoConsultadoAPI): Partial<Record<CampoFe
   return campos
 }
 
-/** Nombre con que el GET regresó la fecha de entrega (aunque venga null); si no la trae, FechaEntrega. */
 function nombreCampoFechaEntrega(pedido: PedidoConsultadoAPI): CampoFechaEntrega {
   return CAMPOS_FECHA_ENTREGA.find((campo) => campo in pedido) ?? 'FechaEntrega'
 }
 
-/**
- * Cuerpo del PUT: el pedido tal como lo regresó el GET, con `cambios` encima. Lo usan cancelar,
- * registrar el pago y editar. MetodoPago y la fecha de entrega se reenvían solo si el GET los
- * trae, con el mismo nombre de campo, para no cambiarlos; las líneas, tal como vienen.
- */
 function cuerpoActualizacion(actual: PedidoConsultadoAPI, cambios: CambiosPedidoAPI): PedidoActualizadoAPI {
   const { entrega, ...campos } = cambios
   return {
     IdCliente: actual.IdCliente,
-    // Un pedido viejo de recolección puede venir con 0; se reenvía como null para que la API lo acepte.
     IdSucursal: idSucursalParaApi(aNumero(actual.IdSucursal)),
     Fecha: actual.Fecha,
     TotalKG: actual.TotalKG,
@@ -313,6 +307,22 @@ function aLinea(linea: LineaConsultadaAPI): LineaPedido {
   }
 }
 
+function aEvento(evento: EventoConsultadoAPI): EventoPedido {
+  return {
+    id: aNumero(evento.Id),
+    fechaHora: String(evento.FechaHora ?? ''),
+    usuario: String(evento.UsuarioNombre ?? 'Sistema'),
+    perfil: String(evento.Perfil ?? ''),
+    accion: String(evento.Accion ?? ''),
+    estadoAnterior: evento.EstadoAnterior == null ? null : aNumero(evento.EstadoAnterior),
+    estadoResultante: evento.EstadoResultante == null ? null : aNumero(evento.EstadoResultante),
+    valorAnterior: evento.ValorAnterior ?? null,
+    valorNuevo: evento.ValorNuevo ?? null,
+    motivo: evento.Motivo ?? null,
+    origen: String(evento.Origen ?? 'web'),
+  }
+}
+
 function aPedido(pedido: PedidoConsultadoAPI): Pedido {
   return {
     id: aNumero(pedido.Id),
@@ -326,19 +336,12 @@ function aPedido(pedido: PedidoConsultadoAPI): Pedido {
     metodoPago: pedido.MetodoPago === undefined || pedido.MetodoPago === null ? null : aNumero(pedido.MetodoPago),
     observaciones: pedido.Observaciones ?? '',
     lineas: (pedido.lineas ?? []).map(aLinea),
+    eventos: (pedido.eventos ?? []).map(aEvento),
   }
 }
 
 const rutaPedido = (id: number) => `/api/pedidos/${encodeURIComponent(id)}`
 
-/**
- * El pedido tal como lo regresa la API, sin convertir; sirve para mostrarlo y para reenviarlo
- * en un PUT. Si no existe, lanza ErrorPedidos con motivo "no_encontrado".
- *
- *   GET /api/pedidos/:id
- *   200 → PedidoConsultadoAPI
- *   404 → { error: string }
- */
 async function consultarPedido(id: number): Promise<PedidoConsultadoAPI> {
   const datos = await solicitar(rutaPedido(id), 'consultar el pedido')
   if (!datos || typeof datos !== 'object' || Array.isArray(datos)) {
@@ -347,20 +350,10 @@ async function consultarPedido(id: number): Promise<PedidoConsultadoAPI> {
   return datos as PedidoConsultadoAPI
 }
 
-/** ErrorPedidos "datos_invalidos" con un mensaje para la vista (va también en `mensajeApi`). */
 function rechazo(mensaje: string): ErrorPedidos {
   return new ErrorPedidos('datos_invalidos', mensaje, mensaje)
 }
 
-/**
- * Registra un pedido nuevo (Estatus 1) y devuelve su folio: "#" y el Id que asigna la API.
- *
- *   POST /api/pedidos
- *   Authorization: Bearer <token>
- *   Cuerpo: PedidoAPI
- *   201 → el pedido creado, con su Id
- *   400/401/403/500 → { error: string }
- */
 export async function registrarPedido(datos: DatosRegistroPedido): Promise<RespuestaRegistroPedido> {
   const creado = (await solicitar('/api/pedidos', 'registrar el pedido', {
     metodo: 'POST',
@@ -374,19 +367,6 @@ export async function registrarPedido(datos: DatosRegistroPedido): Promise<Respu
   return { folio: `#${creado.Id}` }
 }
 
-/**
- * Cancela un pedido (baja lógica): lo vuelve a mandar tal como está, con Estatus 5. Es lo mismo
- * que hace la app móvil; la API no tiene una ruta aparte para cancelar ni dónde guardar el motivo.
- * Primero lo consulta, para reenviar sus datos actuales sin tocarlos (fecha, método de pago,
- * fecha de entrega, observaciones y líneas tal como vienen) y para no cancelar uno que ya se
- * entregó o se canceló.
- *
- *   GET /api/pedidos/:id                → el pedido actual
- *   PUT /api/pedidos/:id                → el mismo pedido con Estatus 5
- *   Authorization: Bearer <token>
- *
- * Si ya no se puede cancelar, lanza ErrorPedidos "datos_invalidos" con el mensaje para la vista.
- */
 export async function cancelarPedido(id: number): Promise<void> {
   const actual = await consultarPedido(id)
 
@@ -401,28 +381,6 @@ export async function cancelarPedido(id: number): Promise<void> {
   })
 }
 
-/**
- * Registra el pago de un pedido surtido o en reparto: lo vuelve a mandar como está, pero
- * Entregado (Estatus 4), con el método de pago y con la fecha de entrega de hoy. Si `notas` no es
- * null, también cambia el texto libre de Observaciones (conserva la modalidad que va antes; ver
- * reemplazarNotas()). Igual que al cancelar, primero lo consulta para reenviar sus datos actuales
- * y para no registrar el pago de uno que ya cambió de estado.
- *
- *   GET /api/pedidos/:id                → el pedido actual
- *   PUT /api/pedidos/:id                → el mismo pedido con Estatus 4, MetodoPago, FechaEntrega
- *                                         y, si cambiaron, Observaciones
- *   Authorization: Bearer <token>
- *
- * Efectivo o tarjeta solos van en MetodoPago (1 o 2). El pago mixto se rechaza por ahora.
- * TODO: cuando la API tenga la tabla PagoPedidosApp (TipoPago 0 pendiente, 1 efectivo, 2 tarjeta,
- * 3 mixto), guardar ahí `pago` con sus montos y activar PAGO_MIXTO_DISPONIBLE en pagoEntrega.ts.
- * TODO: `comprobante` (foto del recibo firmado, opcional) todavía no se envía: la API no puede
- * recibir fotos. Cuando César defina cómo (endpoint, formato, tamaño máximo), enviarlo aquí y
- * activar COMPROBANTE_DISPONIBLE en pagoEntrega.ts.
- *
- * Si ya no está en Surtido ni En reparto, o el pago es mixto, lanza ErrorPedidos
- * "datos_invalidos" con el mensaje para la vista.
- */
 export async function registrarPago(
   id: number,
   pago: PagoEntrega,
@@ -450,19 +408,6 @@ export async function registrarPago(
   })
 }
 
-/**
- * Guarda los cambios de un pedido Pendiente: sucursal, totales, observaciones (con la modalidad,
- * ver armarObservaciones()) y líneas. IdCliente, Fecha, Estatus, MetodoPago
- * y la fecha de entrega se reenvían tal como llegaron. `datos.clienteId` no se usa: el cliente
- * de un pedido no cambia.
- *
- *   GET /api/pedidos/:id                → el pedido actual
- *   PUT /api/pedidos/:id                → el pedido con los cambios
- *   Authorization: Bearer <token>
- *
- * Si el pedido ya no está Pendiente, lanza ErrorPedidos "datos_invalidos" con el mensaje para
- * la vista.
- */
 export async function actualizarPedido(id: number, datos: DatosRegistroPedido): Promise<void> {
   const actual = await consultarPedido(id)
 
@@ -485,14 +430,24 @@ export async function actualizarPedido(id: number, datos: DatosRegistroPedido): 
   })
 }
 
-/**
- * Todos los pedidos, con sus líneas, en el orden en que los regresa la API.
- *
- *   GET /api/pedidos
- *   200 → PedidoConsultadoAPI[]
- */
-export async function obtenerPedidos(): Promise<Pedido[]> {
-  const ruta = obtenerRolUsuario() === 'cliente' ? '/api/pedidos/mios' : '/api/pedidos'
+export async function obtenerPedidos(
+  opciones?: number | { idCliente?: number; incluirEventos?: boolean },
+): Promise<Pedido[]> {
+  const esCliente = obtenerRolUsuario() === 'cliente'
+  const idCliente = typeof opciones === 'number' ? opciones : opciones?.idCliente
+  const incluirEventos = typeof opciones === 'object' && opciones?.incluirEventos === true
+
+  let ruta = '/api/pedidos'
+  if (esCliente) {
+    ruta = '/api/pedidos/mios'
+  } else {
+    const parametros = new URLSearchParams()
+    if (idCliente !== undefined) parametros.set('idCliente', String(idCliente))
+    if (incluirEventos) parametros.set('incluirEventos', '1')
+    const consulta = parametros.toString()
+    if (consulta) ruta = `/api/pedidos?${consulta}`
+  }
+
   const datos = await solicitar(ruta, 'consultar los pedidos')
   if (!Array.isArray(datos)) {
     throw new ErrorPedidos('api', 'La respuesta de la API no trae una lista de pedidos válida.')
@@ -500,13 +455,6 @@ export async function obtenerPedidos(): Promise<Pedido[]> {
   return (datos as PedidoConsultadoAPI[]).map(aPedido)
 }
 
-/**
- * Un pedido con sus líneas. Si no existe, lanza ErrorPedidos con motivo "no_encontrado".
- *
- *   GET /api/pedidos/:id
- *   200 → PedidoConsultadoAPI
- *   404 → { error: string }
- */
 export async function obtenerPedidoPorId(id: number): Promise<Pedido> {
   return aPedido(await consultarPedido(id))
 }
