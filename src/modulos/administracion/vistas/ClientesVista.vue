@@ -1,30 +1,48 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import BotonVue from '@/componentes/BotonVue.vue'
+import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
+import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import LayoutPanelVue from '@/componentes/LayoutPanelVue.vue'
-import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
-import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
-import ModalNuevoCliente from '@/componentes/ModalNuevoCliente.vue'
 import ModalConfirmacion from '@/componentes/ModalConfirmacion.vue'
-import type { ItemNavegacion } from '@/componentes/BarraLateralVue.vue'
-import { obtenerNombreUsuario, obtenerMenuNavegacion } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
-import { obtenerClientesAPI, crearClienteAPI, actualizarClienteAPI, cambiarEstatusClienteAPI, type ClienteAPI } from '@/modulos/administracion/servicios/servicioClientes'
+import ModalNuevoCliente from '@/componentes/ModalNuevoCliente.vue'
+import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
+import {
+  obtenerMenuNavegacion,
+  obtenerNombreUsuario,
+  obtenerRolUsuario,
+} from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import {
+  actualizarClienteAPI,
+  cambiarEstatusClienteAPI,
+  crearClienteAPI,
+  obtenerClientesAPI,
+  type ClienteAPI,
+} from '@/modulos/administracion/servicios/servicioClientes'
 
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
+const esAdministrador = obtenerRolUsuario() === 'administrador'
+
+const MINIMO_CARACTERES_BUSQUEDA = 3
+const MAXIMO_COINCIDENCIAS = 50
+const MENSAJE_ERROR_CONSULTA = 'No fue posible consultar a los clientes. Intente nuevamente.'
 
 // Estados generales
 const clientes = ref<ClienteAPI[]>([])
 const cargando = ref(true)
 const errorCarga = ref('')
 
+// Estados del buscador (CU-03 / RF-CLI-01)
+const textoBusqueda = ref('')
+const criterioActivo = ref('')
+const errorBusqueda = ref('')
+
 // Estados de modales
 const mostrarModal = ref(false)
 const clienteSeleccionado = ref<ClienteAPI | null>(null)
-// Los clientes no se borran: se desactivan (y se pueden reactivar), porque sus pedidos y
-// sucursales los siguen usando.
 const mostrarModalConfirmacion = ref(false)
 const clienteACambiar = ref<ClienteAPI | null>(null)
 const desactivando = computed(() => clienteACambiar.value?.Estatus === 1)
@@ -32,23 +50,115 @@ const desactivando = computed(() => clienteACambiar.value?.Estatus === 1)
 // Estado para controlar qué contraseñas están visibles (guardamos el Id)
 const contrasenasVisibles = ref<number[]>([])
 
-// Columnas adaptadas para Clientes (Agregada CONTRASEÑA)
-const columnasClientes: ColumnaTabla[] = [
-  { clave: 'nombre', etiqueta: 'NOMBRE' },
-  { clave: 'usuario', etiqueta: 'USUARIO' },
-  { clave: 'celular', etiqueta: 'CELULAR' },
-  { clave: 'telegram', etiqueta: 'TELEGRAM' },
-  { clave: 'contrasena', etiqueta: 'CONTRASEÑA' },
-  { clave: 'estado', etiqueta: 'ESTADO' },
-  { clave: 'cambios', etiqueta: 'CAMBIOS', alineacion: 'centro' },
-]
+// Columnas según rol: RN-15 restringe contraseñas y administración de cuentas a personal administrativo
+const columnasClientes = computed<ColumnaTabla[]>(() =>
+  esAdministrador
+    ? [
+        { clave: 'nombre', etiqueta: 'NOMBRE' },
+        { clave: 'usuario', etiqueta: 'USUARIO' },
+        { clave: 'celular', etiqueta: 'CELULAR' },
+        { clave: 'telegram', etiqueta: 'TELEGRAM' },
+        { clave: 'contrasena', etiqueta: 'CONTRASEÑA' },
+        { clave: 'estado', etiqueta: 'ESTADO' },
+        { clave: 'cambios', etiqueta: 'CAMBIOS', alineacion: 'centro' },
+      ]
+    : [
+        { clave: 'nombre', etiqueta: 'NOMBRE' },
+        { clave: 'usuario', etiqueta: 'USUARIO' },
+        { clave: 'celular', etiqueta: 'CELULAR' },
+        { clave: 'telegram', etiqueta: 'TELEGRAM' },
+        { clave: 'estado', etiqueta: 'ESTADO' },
+      ],
+)
+
+function normalizarTexto(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function normalizarTelefono(valor: string): string {
+  return valor.replace(/\D/g, '')
+}
+
+// Clientes base permitidos para el rol y ordenados alfabéticamente por nombre (RF-CLI-01)
+const clientesPermitidos = computed(() => {
+  const base = esAdministrador
+    ? clientes.value
+    : clientes.value.filter((cliente) => cliente.Estatus === 1)
+
+  return [...base].sort((a, b) =>
+    a.Nombre.localeCompare(b.Nombre, 'es', { sensitivity: 'base' }),
+  )
+})
+
+// Coincidencias filtradas por nombre/razón social o teléfono (máximo 50)
+const clientesVisibles = computed(() => {
+  const criterio = criterioActivo.value
+  if (!criterio) {
+    return clientesPermitidos.value.slice(0, MAXIMO_COINCIDENCIAS)
+  }
+
+  const textoNormalizado = normalizarTexto(criterio)
+  const digitosCriterio = normalizarTelefono(criterio)
+
+  return clientesPermitidos.value
+    .filter((cliente) => {
+      const coincideNombre = normalizarTexto(cliente.Nombre).includes(textoNormalizado)
+      const coincideTelefono =
+        digitosCriterio.length > 0 &&
+        normalizarTelefono(cliente.Telefono || '').includes(digitosCriterio)
+
+      return coincideNombre || coincideTelefono
+    })
+    .slice(0, MAXIMO_COINCIDENCIAS)
+})
+
+function ejecutarBusqueda() {
+  const limpio = textoBusqueda.value.trim()
+
+  if (limpio.length === 0) {
+    errorBusqueda.value = ''
+    criterioActivo.value = ''
+    return
+  }
+
+  // A1. Criterio insuficiente (< 3 caracteres)
+  if (limpio.length < MINIMO_CARACTERES_BUSQUEDA) {
+    errorBusqueda.value = 'Capture al menos 3 caracteres para buscar.'
+    return
+  }
+
+  errorBusqueda.value = ''
+  criterioActivo.value = limpio
+}
+
+function alEditarBusqueda(nuevoValor: string) {
+  textoBusqueda.value = nuevoValor
+  const limpio = nuevoValor.trim()
+
+  if (limpio.length === 0) {
+    errorBusqueda.value = ''
+    criterioActivo.value = ''
+  } else if (errorBusqueda.value && limpio.length >= MINIMO_CARACTERES_BUSQUEDA) {
+    errorBusqueda.value = ''
+  }
+}
+
+function limpiarBusqueda() {
+  textoBusqueda.value = ''
+  criterioActivo.value = ''
+  errorBusqueda.value = ''
+}
 
 const alternarContrasena = (id: number) => {
   const index = contrasenasVisibles.value.indexOf(id)
   if (index > -1) {
-    contrasenasVisibles.value.splice(index, 1) // Ocultar
+    contrasenasVisibles.value.splice(index, 1)
   } else {
-    contrasenasVisibles.value.push(id) // Mostrar
+    contrasenasVisibles.value.push(id)
   }
 }
 
@@ -57,8 +167,9 @@ const cargarDatosClientes = async () => {
   errorCarga.value = ''
   try {
     clientes.value = await obtenerClientesAPI()
-  } catch (err: any) {
-    errorCarga.value = err.message || 'Ocurrió un error al cargar los clientes.'
+  } catch {
+    // E1. Error de consulta
+    errorCarga.value = MENSAJE_ERROR_CONSULTA
   } finally {
     cargando.value = false
   }
@@ -120,7 +231,7 @@ const confirmarCambioEstatus = async () => {
     await cambiarEstatusClienteAPI(clienteACambiar.value, desactivando.value ? 0 : 1)
     mostrarModalConfirmacion.value = false
     clienteACambiar.value = null
-    await cargarDatosClientes() 
+    await cargarDatosClientes()
   } catch (err: any) {
     alert(err.message || 'No fue posible cambiar el estado del cliente. Intente nuevamente.')
   }
@@ -140,11 +251,15 @@ const confirmarCambioEstatus = async () => {
         <div>
           <h1 class="panel__titulo">Clientes</h1>
           <p class="panel__subtitulo">
-            Monitorea, modifica, elimina y crea las cuentas de Clientes.
+            {{
+              esAdministrador
+                ? 'Consulta, registra, modifica y desactiva las cuentas de clientes.'
+                : 'Consulta los clientes activos registrados por nombre, razón social o teléfono.'
+            }}
           </p>
         </div>
 
-        <div class="panel__accion">
+        <div v-if="esAdministrador" class="panel__accion">
           <BotonVue variante="exito" @click="abrirModalCrear">
             <IconoVue nombre="mas" :tamano="16" />
             Nuevo Cliente
@@ -152,21 +267,70 @@ const confirmarCambioEstatus = async () => {
         </div>
       </div>
 
+      <!-- Buscador de clientes (CU-03 pasos 2-4 y A1) -->
+      <form class="buscador" @submit.prevent="ejecutarBusqueda">
+        <div class="buscador__campo">
+          <CampoTextoVue
+            id="buscar-cliente"
+            :model-value="textoBusqueda"
+            etiqueta="Buscar cliente"
+            marcador="Nombre, razón social o teléfono (mínimo 3 caracteres)"
+            icono="lupa"
+            compacto
+            autocomplete="off"
+            @update:model-value="alEditarBusqueda"
+          />
+          <p v-if="errorBusqueda" class="buscador__error" role="alert">
+            {{ errorBusqueda }}
+          </p>
+        </div>
+
+        <div class="buscador__acciones">
+          <BotonVue tipo="submit" variante="primario" compacto :deshabilitado="cargando">
+            Buscar
+          </BotonVue>
+          <BotonVue
+            v-if="textoBusqueda || criterioActivo"
+            variante="secundario"
+            compacto
+            @click="limpiarBusqueda"
+          >
+            Limpiar
+          </BotonVue>
+        </div>
+      </form>
+
       <!-- Sección de la tabla de clientes -->
       <section>
         <EncabezadoSeccionVue titulo="Clientes" icono="clientes" />
 
-        <div v-if="cargando" class="panel__estado-carga">
+        <div v-if="cargando" class="panel__estado-carga" role="status">
           Cargando clientes...
         </div>
 
-        <div v-else-if="errorCarga" class="panel__estado-error">
-          {{ errorCarga }}
+        <div v-else-if="errorCarga" class="panel__estado-error" role="alert">
+          <p>{{ errorCarga }}</p>
+          <div class="panel__reintentar">
+            <BotonVue variante="secundario" compacto @click="cargarDatosClientes">
+              Reintentar
+            </BotonVue>
+          </div>
         </div>
 
         <TablaVue v-else :columnas="columnasClientes">
-          <tr 
-            v-for="cliente in clientes" 
+          <!-- A2. Sin coincidencias -->
+          <tr v-if="clientesVisibles.length === 0">
+            <td :colspan="columnasClientes.length" class="panel__sin-resultados">
+              {{
+                criterioActivo
+                  ? 'No se encontraron clientes con ese criterio. Si es un cliente nuevo, solicite su alta al personal administrativo.'
+                  : 'No hay clientes registrados.'
+              }}
+            </td>
+          </tr>
+
+          <tr
+            v-for="cliente in clientesVisibles"
             :key="cliente.Id"
             class="fila-clicable"
             @click="$router.push(`/detalle-cliente-vista/${cliente.Id}`)"
@@ -176,17 +340,17 @@ const confirmarCambioEstatus = async () => {
             <td class="panel__texto-fuerte">{{ cliente.Telefono }}</td>
             <td class="panel__texto-fuerte">{{ cliente.UsuarioTelegram || 'N/A' }}</td>
 
-            <!-- Columna de Contraseña con el ojito -->
-            <td>
+            <!-- Columna de Contraseña (solo administrador) -->
+            <td v-if="esAdministrador">
               <div class="panel__password-wrap" @click.stop>
                 <span class="panel__texto-pass">
                   {{ contrasenasVisibles.includes(cliente.Id) ? cliente.Contrasena : '••••••••' }}
                 </span>
-                <button 
-                  type="button" 
-                  class="btn-ojo" 
-                  @click.stop="alternarContrasena(cliente.Id)"
+                <button
+                  type="button"
+                  class="btn-ojo"
                   title="Mostrar/Ocultar contraseña"
+                  @click.stop="alternarContrasena(cliente.Id)"
                 >
                   <IconoVue :nombre="contrasenasVisibles.includes(cliente.Id) ? 'ojo-cerrado' : 'ojo'" :tamano="16" />
                 </button>
@@ -199,12 +363,12 @@ const confirmarCambioEstatus = async () => {
                 :etiqueta="cliente.Estatus === 1 ? 'Activo' : 'Inactivo'"
               />
             </td>
-            <td class="tabla__celda--centro">
+
+            <td v-if="esAdministrador" class="tabla__celda--centro">
               <div class="panel__acciones-fila">
-                <!-- Se quitó el botón de seguridad (candado) -->
-                <button 
-                  type="button" 
-                  class="btn-accion btn-accion--editar" 
+                <button
+                  type="button"
+                  class="btn-accion btn-accion--editar"
                   aria-label="Editar cliente"
                   @click.stop="abrirModalEditar(cliente)"
                 >
@@ -239,6 +403,7 @@ const confirmarCambioEstatus = async () => {
   </LayoutPanelVue>
 
   <ModalNuevoCliente
+    v-if="esAdministrador"
     :mostrar="mostrarModal"
     :cliente-editar="clienteSeleccionado"
     @cerrar="mostrarModal = false"
@@ -246,6 +411,7 @@ const confirmarCambioEstatus = async () => {
   />
 
   <ModalConfirmacion
+    v-if="esAdministrador"
     :mostrar="mostrarModalConfirmacion"
     :titulo="desactivando ? '¿Desactivar cliente?' : '¿Reactivar cliente?'"
     :mensaje="
@@ -265,7 +431,7 @@ const confirmarCambioEstatus = async () => {
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
   max-width: 1100px;
 }
 
@@ -293,6 +459,31 @@ const confirmarCambioEstatus = async () => {
   flex: none;
 }
 
+.buscador {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.buscador__campo {
+  flex: 1;
+  min-width: 260px;
+}
+
+.buscador__error {
+  margin: 6px 0 0;
+  color: var(--gf-cancelado-punto);
+  font-size: 13px;
+}
+
+.buscador__acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 24px;
+}
+
 .panel__texto-fuerte {
   font-weight: 700;
   color: var(--gf-texto);
@@ -310,7 +501,6 @@ const confirmarCambioEstatus = async () => {
   gap: 6px;
 }
 
-/* Estilos para la contraseña y ojito */
 .panel__password-wrap {
   display: flex;
   align-items: center;
@@ -359,6 +549,22 @@ const confirmarCambioEstatus = async () => {
   border-color: var(--gf-cancelado-punto);
 }
 
+.panel__estado-error p {
+  margin: 0;
+}
+
+.panel__reintentar {
+  display: inline-flex;
+  margin-top: 12px;
+}
+
+.panel__sin-resultados {
+  padding: 32px 16px;
+  color: var(--gf-texto-tenue);
+  text-align: center;
+  white-space: normal;
+}
+
 .btn-accion {
   display: inline-flex;
   align-items: center;
@@ -401,7 +607,7 @@ const confirmarCambioEstatus = async () => {
 
 @media (max-width: 900px) {
   .panel {
-    gap: 28px;
+    gap: 24px;
   }
   .panel__titulo {
     font-size: 20px;
@@ -412,6 +618,10 @@ const confirmarCambioEstatus = async () => {
   .panel__bienvenida {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .buscador__acciones {
+    padding-top: 0;
   }
 }
 </style>

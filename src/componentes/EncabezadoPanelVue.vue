@@ -1,12 +1,17 @@
 <script setup lang="ts">
-// Barra superior del panel: logo, título de la pantalla y usuario.
+// Barra superior del panel: logo, título de la pantalla, usuario y control de inactividad.
 
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import BotonVue from '@/componentes/BotonVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
-import { cerrarSesion, obtenerIdUsuarioSesion, obtenerRolUsuario} from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import ModalVue from '@/componentes/ModalVue.vue'
+import {
+  cerrarSesion,
+  obtenerIdUsuarioSesion,
+  obtenerRolUsuario,
+} from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import logo from '@/recursos/logo-transparente.png'
 
 interface Props {
@@ -17,11 +22,6 @@ interface Props {
 
 const props = defineProps<Props>()
 const enrutador = useRouter()
-
-function salir(): void {
-  cerrarSesion()
-  enrutador.replace('/inicio-sesion')
-}
 
 // Iniciales de las dos primeras palabras del nombre.
 const iniciales = computed(() =>
@@ -42,6 +42,66 @@ function irAPerfil(): void {
   enrutador.push({ name: 'detalle-cliente', params: { id: idClienteSesion } })
 }
 
+// Modal de confirmación de cierre de sesión (CU-02 / RF-ACC-02)
+const mostrarModalCerrarSesion = ref(false)
+
+function solicitarCerrarSesion(): void {
+  mostrarModalCerrarSesion.value = true
+}
+
+function cancelarCerrarSesion(): void {
+  // Flujo alterno A1: conserva la sesión activa
+  mostrarModalCerrarSesion.value = false
+}
+
+function confirmarCerrarSesion(): void {
+  mostrarModalCerrarSesion.value = false
+  cerrarSesion()
+  enrutador.replace({ path: '/inicio-sesion', query: { sesion: 'cerrada' } })
+}
+
+// Cierre automático por inactividad: 30 minutos en web (RF-ACC-02)
+const TIEMPO_INACTIVIDAD_MS = 30 * 60 * 1000
+const INTERVALO_REVISION_MS = 15_000
+const EVENTOS_ACTIVIDAD = ['mousedown', 'keydown', 'scroll', 'touchstart', 'pointermove'] as const
+
+let ultimaActividad = Date.now()
+let temporizadorInactividad: ReturnType<typeof setInterval> | null = null
+
+function registrarActividad(): void {
+  ultimaActividad = Date.now()
+}
+
+function revisarInactividad(): void {
+  if (Date.now() - ultimaActividad >= TIEMPO_INACTIVIDAD_MS) {
+    mostrarModalCerrarSesion.value = false
+    cerrarSesion()
+    enrutador.replace({ path: '/inicio-sesion', query: { sesion: 'expirada' } })
+  }
+}
+
+function alCambiarVisibilidad(): void {
+  if (document.visibilityState === 'visible') {
+    revisarInactividad()
+  }
+}
+
+onMounted(() => {
+  ultimaActividad = Date.now()
+  for (const evento of EVENTOS_ACTIVIDAD) {
+    window.addEventListener(evento, registrarActividad, { passive: true })
+  }
+  document.addEventListener('visibilitychange', alCambiarVisibilidad)
+  temporizadorInactividad = setInterval(revisarInactividad, INTERVALO_REVISION_MS)
+})
+
+onUnmounted(() => {
+  for (const evento of EVENTOS_ACTIVIDAD) {
+    window.removeEventListener(evento, registrarActividad)
+  }
+  document.removeEventListener('visibilitychange', alCambiarVisibilidad)
+  if (temporizadorInactividad) clearInterval(temporizadorInactividad)
+})
 </script>
 
 <template>
@@ -76,12 +136,32 @@ function irAPerfil(): void {
         solo-icono
         aria-label="Cerrar sesión"
         title="Cerrar sesión"
-        @click="salir"
+        @click="solicitarCerrarSesion"
       >
         <IconoVue nombre="salir" :tamano="18" />
       </BotonVue>
     </div>
   </header>
+
+  <ModalVue
+    :mostrar="mostrarModalCerrarSesion"
+    titulo="¿Desea cerrar sesión?"
+    :ancho-maximo="420"
+    @cerrar="cancelarCerrarSesion"
+  >
+    <p class="modal-cierre__texto">
+      Se cerrará tu sesión actual en este dispositivo y tendrás que ingresar nuevamente para continuar.
+    </p>
+
+    <template #pie>
+      <BotonVue variante="secundario" @click="cancelarCerrarSesion">
+        Cancelar
+      </BotonVue>
+      <BotonVue variante="primario" @click="confirmarCerrarSesion">
+        Cerrar sesión
+      </BotonVue>
+    </template>
+  </ModalVue>
 </template>
 
 <style scoped>
@@ -172,6 +252,13 @@ function irAPerfil(): void {
   margin: 0 8px 0 0;
   font-size: 13px;
   font-weight: 600;
+}
+
+.modal-cierre__texto {
+  margin: 0;
+  color: var(--gf-texto-tenue);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 @media (max-width: 900px) {

@@ -100,6 +100,9 @@ async function agregar(producto: ProductoVenta) {
           <p v-if="!tieneCodigoProducto(producto)" class="productos-modal__detalle">
             Sin código de producto en el inventario.
           </p>
+          <p v-else-if="estaAgotado(producto)" class="productos-modal__detalle productos-modal__agotado">
+            Producto agotado: no puede agregarse al pedido.
+          </p>
         </div>
 
         <ChipEstadoVue v-if="!esCliente" v-bind="chip(producto)" />
@@ -145,6 +148,11 @@ async function agregar(producto: ProductoVenta) {
   gap: 12px;
   padding: 12px 0;
   border-top: 1px solid var(--gf-borde);
+}
+
+.productos-modal__agotado {
+  color: var(--gf-cancelado-fg);
+  font-weight: 500;
 }
 
 .productos-modal__item:first-child {

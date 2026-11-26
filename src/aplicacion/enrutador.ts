@@ -11,6 +11,7 @@ import PedidosVista from '@/modulos/ventas/vistas/PedidosVista.vue'
 import DetallePedidoVista from '@/modulos/ventas/vistas/DetallePedidoVista.vue'
 import EditarPedidoVista from '@/modulos/ventas/vistas/EditarPedidoVista.vue'
 import ReportesVista from '@/modulos/administracion/vistas/ReportesVista.vue'
+import InventarioVista from '@/modulos/almacen/vistas/InventarioVista.vue'
 
 const enrutador = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -76,7 +77,13 @@ const enrutador = createRouter({
       name: 'reportes',
       component: ReportesVista,
       meta: { requiereAutenticacion: true }
-    }
+    },
+    {
+      path: '/inventario',
+      name: 'inventario',
+      component: InventarioVista,
+      meta: { requiereAutenticacion: true },
+    },
   ],
 })
 

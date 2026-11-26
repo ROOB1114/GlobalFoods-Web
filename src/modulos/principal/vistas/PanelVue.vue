@@ -20,6 +20,7 @@ import { usarActualizacionPeriodica } from '@/modulos/ventas/controladores/usarA
 import { usarDirectorioPedidos } from '@/modulos/ventas/controladores/usarDirectorioPedidos'
 import type { Pedido } from '@/modulos/ventas/interfaces/pedido'
 import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
+import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 
 const enrutador = useRouter()
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
@@ -86,8 +87,11 @@ async function cargarInventario() {
       ? await obtenerCatalogoCliente()
       : await obtenerInventarioActual()
   } catch (errorCapturado) {
+    inventario.value = []
     errorInventario.value =
-      errorCapturado instanceof Error ? errorCapturado.message : 'No se pudo cargar el inventario.'
+      errorCapturado instanceof Error
+        ? errorCapturado.message
+        : 'No es posible confirmar la disponibilidad en este momento.'
   } finally {
     cargandoInventario.value = false
   }
@@ -143,12 +147,14 @@ const columnasInventario: ColumnaTabla[] = esCliente
   ? [
       { clave: 'talla', etiqueta: 'Talla' },
       { clave: 'precio', etiqueta: 'Precio' },
+      { clave: 'estado', etiqueta: 'Estado', alineacion: 'centro' },
     ]
   : [
       { clave: 'talla', etiqueta: 'Talla' },
       { clave: 'precio', etiqueta: 'Precio' },
       { clave: 'master', etiqueta: 'Master', alineacion: 'centro' },
       { clave: 'cantidadKg', etiqueta: 'Stock (kg)', alineacion: 'centro' },
+      { clave: 'estado', etiqueta: 'Estado', alineacion: 'centro' },
     ]
 
 const columnasPedidos: ColumnaTabla[] = [
@@ -161,6 +167,28 @@ const columnasPedidos: ColumnaTabla[] = [
   { clave: 'metodoPago', etiqueta: 'Método de pago' },
   { clave: 'total', etiqueta: 'Total', alineacion: 'derecha' },
 ]
+
+const busquedaInventario = ref('')
+
+function normalizarTexto(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+const inventarioFiltrado = computed(() => {
+  const texto = normalizarTexto(busquedaInventario.value)
+  if (!texto) return inventario.value
+  return inventario.value.filter(
+    (item) =>
+      normalizarTexto(item.talla).includes(texto) ||
+      normalizarTexto(item.nombre).includes(texto) ||
+      String(item.codigoProducto ?? '').includes(texto),
+  )
+})
+
 </script>
 
 <template>
@@ -191,7 +219,37 @@ const columnasPedidos: ColumnaTabla[] = [
       <!-- Sección de Inventario -->
       <!-- Sección de Inventario -->
       <section class="panel__seccion">
-        <EncabezadoSeccionVue :titulo="esCliente ? 'Catálogo de Productos' : 'Inventario'" icono="caja" />
+        <EncabezadoSeccionVue :titulo="esCliente ? 'Catálogo de Productos' : 'Inventario'" icono="caja">
+          <BotonVue
+            v-if="!esCliente"
+            variante="secundario"
+            compacto
+            @click="enrutador.push({ name: 'inventario' })"
+          >
+            Ver todo el inventario
+          </BotonVue>
+        </EncabezadoSeccionVue>
+
+        <div v-if="errorInventario" class="panel__alerta-inventario" role="alert">
+          <div class="panel__alerta-texto">
+            <IconoVue nombre="alerta" :tamano="18" />
+            <span>{{ errorInventario }}</span>
+          </div>
+          <BotonVue variante="secundario" compacto @click="cargarInventario">Reintentar</BotonVue>
+        </div>
+
+        <div class="panel__buscador-inventario">
+          <CampoTextoVue
+            id="panel-buscar-inventario"
+            v-model="busquedaInventario"
+            etiqueta="Buscar producto"
+            marcador="Talla, nombre o código"
+            icono="lupa"
+            compacto
+            autocomplete="off"
+            :deshabilitado="cargandoInventario || !!errorInventario"
+          />
+        </div>
 
         <TablaVue :columnas="columnasInventario" :alto-maximo="altoInventario">
           <tr v-if="cargandoInventario">
@@ -200,18 +258,30 @@ const columnasPedidos: ColumnaTabla[] = [
             </td>
           </tr>
           <tr v-else-if="errorInventario">
-            <td :colspan="columnasInventario.length" class="panel__mensaje panel__error" role="alert">
-              {{ errorInventario }}
+            <td :colspan="columnasInventario.length" class="panel__mensaje">
+              No se muestra la disponibilidad en este momento.
             </td>
           </tr>
-          <tr v-else-if="inventario.length === 0">
-            <td :colspan="columnasInventario.length" class="panel__mensaje">No hay productos disponibles.</td>
+          <tr v-else-if="inventarioFiltrado.length === 0">
+            <td :colspan="columnasInventario.length" class="panel__mensaje">
+              {{
+                inventario.length
+                  ? 'No se encontraron productos con ese criterio.'
+                  : 'No hay productos disponibles.'
+              }}
+            </td>
           </tr>
-          <tr v-for="fila in inventario" :key="fila.talla">
-            <td>{{ fila.talla }}</td>
-            <td>{{ formatearMoneda(fila.precio) }}</td>
+          <tr v-for="fila in inventarioFiltrado" :key="`${fila.codigoProducto ?? fila.talla}-${fila.master}`">
+            <td>{{ fila.talla || fila.nombre }}</td>
+            <td>{{ formatearMoneda(fila.precio) }} / {{ fila.unidadMedida }}</td>
             <td v-if="!esCliente" class="tabla__celda--centro">{{ fila.master }}</td>
             <td v-if="!esCliente" class="tabla__celda--centro">{{ fila.cantidadKg }}</td>
+            <td class="tabla__celda--centro">
+              <ChipEstadoVue
+                :estado="esCliente || fila.cantidadKg > 0 ? 'entregado' : 'cancelado'"
+                :etiqueta="esCliente || fila.cantidadKg > 0 ? 'Disponible' : 'Agotado'"
+              />
+            </td>
           </tr>
         </TablaVue>
       </section>
@@ -283,6 +353,33 @@ const columnasPedidos: ColumnaTabla[] = [
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.panel__alerta-inventario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--gf-preparacion-punto) 45%, transparent);
+  border-radius: 8px;
+  background: var(--gf-preparacion-bg);
+  color: var(--gf-preparacion-fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.panel__alerta-texto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel__buscador-inventario {
+  max-width: 360px;
+  margin-bottom: 10px;
 }
 
 .panel__bienvenida {

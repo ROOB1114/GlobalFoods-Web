@@ -22,7 +22,7 @@ function getHeaders() {
 
 export async function obtenerClientesAPI(): Promise<ClienteAPI[]> {
   const res = await fetch(`${URL_API.replace(/\/$/, '')}/api/clientes`, { headers: getHeaders() })
-  if (!res.ok) throw new Error('Error al obtener los clientes')
+  if (!res.ok) throw new Error('No fue posible consultar a los clientes. Intente nuevamente.')
   return res.json()
 }
 

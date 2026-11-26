@@ -80,13 +80,16 @@ export function idCampoCantidad(productoId: string): string {
  */
 export function aProductoVenta(articulo: ArticuloInventario, indice: number): ProductoVenta {
   const { codigoProducto } = articulo
+  const unidad = articulo.unidadMedida || 'kg'
   return {
     productoId: codigoProducto !== null ? String(codigoProducto) : `sin-codigo-${indice}`,
     codigoProducto,
     talla: articulo.talla,
-    // El inventario no trae nombre: se muestra la talla tal cual.
-    nombre: articulo.talla.trim(),
-    presentacion: PRESENTACION_PRODUCTO,
+    nombre: articulo.talla.trim() || articulo.nombre.trim(),
+    presentacion:
+      articulo.nombre && articulo.nombre !== articulo.talla
+        ? `${articulo.nombre} · Venta por ${unidad}`
+        : `Venta por ${unidad}`,
     precioKg: articulo.precio,
     disponibleKg: articulo.cantidadKg,
   }
@@ -184,7 +187,9 @@ export function usarFormularioPedido(opciones: { alFallarSucursales: () => void 
     cargandoInventario.value = true
     errorInventario.value = false
     try {
-      const lista = esCliente ? await obtenerCatalogoCliente() : await obtenerInventarioActual()
+      const lista = esCliente
+        ? await obtenerCatalogoCliente()
+        : await obtenerInventarioActual({ incluirAgotados: true })
       productosInventario.value = lista.map(aProductoVenta)
       if (esCliente && cliente.value) {
         cargarSucursales()

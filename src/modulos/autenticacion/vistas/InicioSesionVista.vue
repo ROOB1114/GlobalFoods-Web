@@ -16,17 +16,21 @@ const ruta = useRoute()
 const usuario = ref('')
 const contrasena = ref('')
 const cargando = ref(false)
-// ?sesion=expirada: otra pantalla cerró la sesión porque la API rechazó el token.
+
+// ?sesion=expirada: expiró el token o se superaron 30 min de inactividad (RF-ACC-02).
 const error = ref(ruta.query.sesion === 'expirada' ? 'Su sesión expiró. Inicie sesión nuevamente.' : '')
+// ?sesion=cerrada: el usuario cerró sesión manualmente (CU-02 paso 5).
+const aviso = ref(ruta.query.sesion === 'cerrada' ? 'Sesión cerrada correctamente.' : '')
 
 const iniciarSesion = async () => {
   error.value = ''
+  aviso.value = ''
 
   const usuarioLimpio = usuario.value.trim()
   const contrasenaLimpia = contrasena.value.trim()
 
   if (!usuarioLimpio || !contrasenaLimpia) {
-    error.value = 'Ingresa tu usuario y contraseña.'
+    error.value = 'Capture su usuario y contraseña.'
     return
   }
 
@@ -52,6 +56,10 @@ const iniciarSesion = async () => {
     <div class="inicio-sesion__panel">
       <div class="inicio-sesion__contenido">
         <img :src="logotipo" alt="Global Foods México" class="inicio-sesion__logotipo" />
+
+        <p v-if="aviso" class="inicio-sesion__aviso" role="status">
+          {{ aviso }}
+        </p>
 
         <form class="inicio-sesion__formulario" @submit.prevent="iniciarSesion">
           <CampoTextoVue
@@ -94,7 +102,6 @@ const iniciarSesion = async () => {
             Ingresar
           </BotonVue>
         </form>
-
       </div>
 
       <footer class="inicio-sesion__pie">
@@ -154,6 +161,18 @@ const iniciarSesion = async () => {
   width: 210px;
   max-width: 100%;
   margin: 0 auto 40px;
+}
+
+.inicio-sesion__aviso {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--gf-entregado-punto, #16a34a) 45%, transparent);
+  border-radius: 8px;
+  background: var(--gf-entregado-bg, #f0fdf4);
+  color: var(--gf-entregado-fg, #166534);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
 }
 
 .inicio-sesion__formulario {
