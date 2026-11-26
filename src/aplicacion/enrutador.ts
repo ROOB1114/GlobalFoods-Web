@@ -3,7 +3,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import InicioSesionVista from '@/modulos/autenticacion/vistas/InicioSesionVista.vue'
 import PanelVue from '@/modulos/principal/vistas/PanelVue.vue'
 import UsuariosVista from '@/modulos/administracion/vistas/UsuariosVista.vue'
-import { esRolReportes, haySesion } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+import { esRolReportes, haySesion, obtenerIdUsuarioSesion,
+  obtenerRolUsuario, } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import ClientesVista from '@/modulos/administracion/vistas/ClientesVista.vue'
 import DetalleClienteVista from '@/modulos/administracion/vistas/DetalleClienteVista.vue'
 import NuevoPedidoVista from '@/modulos/ventas/vistas/NuevoPedidoVista.vue'
@@ -65,12 +66,14 @@ const enrutador = createRouter({
     {
       path: '/clientes',
       name: 'clientes',
-      component: ClientesVista
+      component: ClientesVista,
+      meta: { requiereAutenticacion: true },
     },
     {
       path: '/detalle-cliente-vista/:id',
       name: 'detalle-cliente',
-      component: DetalleClienteVista
+      component: DetalleClienteVista,
+      meta: { requiereAutenticacion: true }
     },
     {
       path: '/reportes',
@@ -100,6 +103,16 @@ enrutador.beforeEach((destino) => {
 
   if (haySesion() && esRolReportes() && destino.name !== 'reportes' && destino.name !== 'detalle-pedido') {
     return '/reportes'
+  }
+
+  if (haySesion() && obtenerRolUsuario() === 'cliente') {
+    if (destino.name === 'clientes') return '/panel'
+    if (destino.name === 'detalle-cliente') {
+      const idSesion = obtenerIdUsuarioSesion()
+      if (!idSesion || Number(destino.params.id) !== idSesion) {
+        return '/panel'
+      }
+    }
   }
 })
 

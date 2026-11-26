@@ -1,17 +1,4 @@
 <script setup lang="ts">
-// Detalle de un pedido: avance, cliente y entrega, y productos.
-// Acciones del administrativo (ver permisosPedidos.ts):
-// - "Editar pedido", solo en Pendiente: lleva a /pedidos/:id/editar.
-// - "Registrar pago", en Surtido o En reparto: elige Efectivo o Transferencia y el pedido queda
-//   Entregado con la fecha de entrega de hoy.
-// - "Cancelar pedido", mientras no se haya entregado (Creado, Surtido o En reparto, igual que en
-//   la app móvil); el pedido no se borra, queda Cancelado.
-// Todavía no lleva la tarjeta "Historial del pedido" del diseño: la API no guarda los cambios de
-// estado con su fecha y hora.
-// Se actualiza solo cada minuto para reflejar lo que cambia el sistema interno (Surtido y, si el
-// pago se registra ahí, el método de pago, la fecha de entrega y Entregado), salvo mientras está
-// abierta la ventana de cancelar o la de registrar el pago.
-
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import AvisoVue from '@/componentes/AvisoVue.vue'
@@ -27,6 +14,7 @@ import ModalCancelarPedidoVue from '@/modulos/ventas/componentes/ModalCancelarPe
 import ModalRegistrarPagoVue from '@/modulos/ventas/componentes/ModalRegistrarPagoVue.vue'
 import {
   ESTATUS,
+  estadoDePedido,
   sePuedeCancelar,
   sePuedeEditar,
   sePuedeRegistrarPago,
@@ -108,7 +96,7 @@ const origen: {
     migas: [{ etiqueta: 'Pedidos', destino: { name: 'pedidos' } }],
   }
 })()
-// La ruta solo acepta dígitos (/pedidos/:id(\d+)).
+
 const id = Number(ruta.params.id)
 const consulta = reactive(usarDetallePedido(id, { alVencerSesion: () => salirPorSesionVencida(enrutador) }))
 
@@ -126,7 +114,18 @@ const folio = `#${id}`
 const mensajeAviso = ref('')
 const varianteAviso = ref<'error' | 'exito'>('error')
 
-/** Muestra el aviso; si el mismo texto ya estaba, se vuelve a anunciar. */
+function formatearFechaHoraEvento(valor: string): string {
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return valor || SIN_DATO
+  return fecha.toLocaleString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 async function avisar(texto: string, variante: 'error' | 'exito') {
   mensajeAviso.value = ''
   await nextTick()
@@ -136,8 +135,6 @@ async function avisar(texto: string, variante: 'error' | 'exito') {
 
 onMounted(() => {
   consulta.cargar()
-  // ?aviso=actualizado: se llega aquí después de guardar en Editar pedido. Se quita de la
-  // dirección para que no se repita al recargar.
   if (ruta.query.aviso === AVISO_PEDIDO_ACTUALIZADO) {
     avisar(MENSAJES_EDICION.exito, 'exito')
     enrutador.replace({ query: {} })
@@ -164,7 +161,7 @@ const puedeCancelar = computed(
   () => !!consulta.pedido && sePuedeCancelar(consulta.pedido.estado.estatus) && perfilPuedeCancelar(),
 )
 const cancelado = computed(() => consulta.pedido?.estado.estatus === ESTATUS.cancelado)
-/** Aviso de la ventana de cancelar según el estado; no bloquea. */
+
 const advertenciaCancelar = computed(() => {
   const estatus = consulta.pedido?.estado.estatus
   if (estatus === ESTATUS.surtido) return 'Almacén ya surtió este pedido.'
@@ -191,18 +188,11 @@ const puedeRegistrarPago = computed(
 const mostrarPago = ref(false)
 const registrandoPago = ref(false)
 
-// No se actualiza mientras hay una ventana abierta o un cambio en camino.
 usarActualizacionPeriodica(() => {
   const ocupado = mostrarCancelar.value || cancelando.value || mostrarPago.value || registrandoPago.value
   if (!ocupado) consulta.cargar({ silencioso: true })
 })
 
-/**
- * Manejo común de los errores al cancelar y al registrar el pago. Con 400/409 la API (o la
- * consulta previa) no lo permitió, p. ej. el pedido ya cambió de estado: se cierra la ventana,
- * se muestra su mensaje y se recarga el pedido para ver su estado actual. Sin conexión u otro
- * error, la ventana se queda abierta para reintentar.
- */
 async function alFallarCambio(
   error: unknown,
   mensajes: { sinConexion: string; error: string },
@@ -319,6 +309,11 @@ async function alConfirmarPago(pago: PagoEntrega, notas: string | null, comproba
         <RouterLink :to="{ name: 'pedidos' }" class="detalle__enlace">Volver a Pedidos</RouterLink>
       </div>
 
+      <div v-else-if="consulta.sinPermiso" class="detalle__mensaje">
+        <p class="detalle__error" role="alert">{{ MENSAJES_DETALLE.sinPermiso }}</p>
+        <RouterLink :to="{ name: 'pedidos' }" class="detalle__enlace">Volver a Pedidos</RouterLink>
+      </div>
+
       <div v-else-if="consulta.errorCarga" class="detalle__mensaje">
         <p class="detalle__error" role="alert">{{ MENSAJES_DETALLE.errorCarga }}</p>
         <div class="detalle__reintentar">
@@ -430,6 +425,46 @@ async function alConfirmarPago(pago: PagoEntrega, notas: string | null, comproba
               <td class="tabla__celda--derecha productos__importe">{{ formatearMoneda(consulta.pedido.total) }}</td>
             </tr>
           </TablaVue>
+        </section>
+
+        <section class="tarjeta">
+          <EncabezadoSeccionVue titulo="Historial del pedido" icono="reloj" />
+
+          <p v-if="consulta.pedido.eventos.length === 0" class="historial__vacio">
+            Aún no hay eventos registrados en la bitácora para este pedido.
+          </p>
+
+          <ol v-else class="historial" aria-label="Línea de tiempo del pedido">
+            <li v-for="evento in consulta.pedido.eventos" :key="evento.id" class="historial__item">
+              <span class="historial__punto" aria-hidden="true"></span>
+              <div class="historial__contenido">
+                <div class="historial__cabecera">
+                  <strong class="historial__accion">{{ evento.accion }}</strong>
+                  <ChipEstadoVue
+                    v-if="evento.estadoResultante !== null"
+                    :estado="estadoDePedido(evento.estadoResultante).chip"
+                    :etiqueta="estadoDePedido(evento.estadoResultante).etiqueta"
+                  />
+                  <span class="historial__fecha">{{ formatearFechaHoraEvento(evento.fechaHora) }}</span>
+                </div>
+
+                <p class="historial__actor">
+                  {{ evento.usuario }} ({{ evento.perfil }}) · {{ evento.origen === 'movil' ? 'App móvil' : 'Web' }}
+                </p>
+
+                <p v-if="evento.valorAnterior || evento.valorNuevo" class="historial__cambio">
+                  <template v-if="evento.valorAnterior && evento.valorNuevo">
+                    {{ evento.valorAnterior }} → {{ evento.valorNuevo }}
+                  </template>
+                  <template v-else>{{ evento.valorNuevo || evento.valorAnterior }}</template>
+                </p>
+
+                <p v-if="evento.motivo" class="historial__motivo">
+                  Observación / motivo: {{ evento.motivo }}
+                </p>
+              </div>
+            </li>
+          </ol>
         </section>
       </template>
     </div>
@@ -549,7 +584,6 @@ async function alConfirmarPago(pago: PagoEntrega, notas: string | null, comproba
   font-size: 14px;
 }
 
-/* En columnas: BotonVue ocupa todo el ancho, y así cada uno mide lo que su texto. */
 .detalle__acciones {
   display: grid;
   grid-auto-flow: column;
@@ -658,7 +692,6 @@ async function alConfirmarPago(pago: PagoEntrega, notas: string | null, comproba
   font-weight: 600;
 }
 
-/* .tarjeta delante para ganarle a los estilos de las celdas de TablaVue. */
 .tarjeta .productos__vacio {
   padding: 24px 16px;
   color: var(--gf-texto-tenue);
@@ -673,6 +706,90 @@ async function alConfirmarPago(pago: PagoEntrega, notas: string | null, comproba
 .productos__importe {
   color: var(--gf-primario);
   font-size: 16px;
+}
+
+.historial {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: none;
+}
+
+.historial::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 5px;
+  width: 2px;
+  background: var(--gf-borde);
+}
+
+.historial__item {
+  position: relative;
+}
+
+.historial__punto {
+  position: absolute;
+  top: 6px;
+  left: -18px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--gf-superficie);
+  border-radius: 50%;
+  background: var(--gf-primario);
+}
+
+.historial__contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.historial__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.historial__accion {
+  color: var(--gf-texto);
+  font-size: 14px;
+}
+
+.historial__fecha {
+  margin-left: auto;
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
+}
+
+.historial__actor {
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
+}
+
+.historial__cambio {
+  color: var(--gf-texto);
+  font-size: 13px;
+}
+
+.historial__motivo {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--gf-fondo);
+  color: var(--gf-texto);
+  font-size: 13px;
+}
+
+.historial__vacio {
+  padding: 16px 0;
+  color: var(--gf-texto-tenue);
+  font-size: 14px;
+  text-align: center;
 }
 
 @media (max-width: 640px) {

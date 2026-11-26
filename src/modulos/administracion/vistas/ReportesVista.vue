@@ -4,21 +4,38 @@ import { RouterLink, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 
 import BotonVue from '@/componentes/BotonVue.vue'
+import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
 import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
+import IconoVue from '@/componentes/IconoVue.vue'
 import LayoutPanelVue from '@/componentes/LayoutPanelVue.vue'
 import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
+import {
+  crearOrdenCorte,
+  obtenerOrdenCortePendiente,
+  obtenerPedidosCortados,
+  type OrdenCorte,
+  type PedidoCortado,
+} from '@/modulos/administracion/servicios/servicioCortes'
 import {
   obtenerMenuNavegacion,
   obtenerNombreUsuario,
   obtenerRolUsuario,
 } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
-import { ESTATUS } from '@/modulos/ventas/controladores/estadosPedido'
+import { ESTADOS_FILTRO, ESTATUS, estadoDePedido } from '@/modulos/ventas/controladores/estadosPedido'
 import { formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
+import { METODO_PAGO, textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
+import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
 import { usarDirectorioPedidos } from '@/modulos/ventas/controladores/usarDirectorioPedidos'
 import type { Pedido } from '@/modulos/ventas/interfaces/pedido'
 import { ErrorPedidos, obtenerPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
-import { crearOrdenCorte, obtenerOrdenCortePendiente, obtenerPedidosCortados, type OrdenCorte,type PedidoCortado,} from '@/modulos/administracion/servicios/servicioCortes'
+
+const MENSAJES_RESUMEN = {
+  rangoInvalido: 'La fecha inicial debe ser anterior a la fecha final.',
+  maximoDoceMeses: 'Seleccione un periodo de 12 meses o menos.',
+  sinRegistros: 'No hay registros en el periodo seleccionado.',
+  errorConsolidar: 'No fue posible generar el resumen.',
+}
 
 const enrutador = useRouter()
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
@@ -26,41 +43,18 @@ const itemsNavegacion = obtenerMenuNavegacion()
 const esAdministrador = obtenerRolUsuario() === 'administrador'
 const SIN_DATO = '—'
 
-const pestanaActiva = ref<'ventas' | 'corte'>('ventas')
+const pestanaActiva = ref<'resumen' | 'corte'>('resumen')
 
 const pedidos = shallowRef<Pedido[]>([])
 const cargando = ref(true)
 const errorCarga = ref(false)
 const directorio = usarDirectorioPedidos()
 
-// Estado de la orden de corte (se conectará al endpoint del backend)
+// Estado de la pestaña Corte
 const enviandoCorte = ref(false)
-const mensajeCorte = ref('')
 const ordenPendiente = ref<OrdenCorte | null>(null)
 const errorCorte = ref('')
-
-// Filtros de rango de fechas (aaaa-mm-dd)
-const desde = ref('')
-const hasta = ref('')
-
-const columnas: ColumnaTabla[] = [
-  { clave: 'codigo', etiqueta: 'Código de venta' },
-  { clave: 'cliente', etiqueta: 'Cliente' },
-  { clave: 'fecha', etiqueta: 'Fecha' },
-  { clave: 'cantidad', etiqueta: 'Cantidad', alineacion: 'derecha' },
-  { clave: 'total', etiqueta: 'Total pagado', alineacion: 'derecha' },
-]
-
 const pedidosCortados = ref<PedidoCortado[]>([])
-
-const columnasCorte: ColumnaTabla[] = [
-  ...columnas,
-  { clave: 'estadoCorte', etiqueta: 'Corte', alineacion: 'centro' },
-]
-
-const mapaCortesPorPedido = computed(
-  () => new Map(pedidosCortados.value.map((item) => [item.idPedido, item])),
-)
 
 function obtenerFechaHoyLocal(): string {
   const ahora = new Date()
@@ -72,15 +66,245 @@ function obtenerFechaHoyLocal(): string {
 
 const fechaHoy = obtenerFechaHoyLocal()
 
-const errorFechas = computed(() =>
-  desde.value && hasta.value && desde.value > hasta.value
-    ? 'La fecha inicial debe ser anterior o igual a la fecha final.'
-    : '',
+// Periodo por omisión: día actual (RF-ADM-01)
+const desde = ref(fechaHoy)
+const hasta = ref(fechaHoy)
+const periodoDesde = ref(fechaHoy)
+const periodoHasta = ref(fechaHoy)
+const errorFechas = ref('')
+
+// A3. Filtro activo por estado dentro del periodo (null = todos los estados)
+const estadoSeleccionado = ref<number | null>(null)
+
+function excedeDoceMeses(fechaInicio: string, fechaFin: string): boolean {
+  const [anioI, mesI, diaI] = fechaInicio.split('-').map(Number)
+  const [anioF, mesF, diaF] = fechaFin.split('-').map(Number)
+  if (!anioI || !mesI || !diaI || !anioF || !mesF || !diaF) return false
+
+  const limite = new Date(anioI + 1, mesI - 1, diaI)
+  if (limite.getMonth() !== mesI - 1) limite.setDate(0)
+  const fin = new Date(anioF, mesF - 1, diaF)
+  return fin.getTime() > limite.getTime()
+}
+
+function aplicarPeriodo() {
+  if (!desde.value || !hasta.value) {
+    errorFechas.value = MENSAJES_RESUMEN.rangoInvalido
+    return
+  }
+  if (desde.value > hasta.value) {
+    errorFechas.value = MENSAJES_RESUMEN.rangoInvalido
+    return
+  }
+  if (excedeDoceMeses(desde.value, hasta.value)) {
+    errorFechas.value = MENSAJES_RESUMEN.maximoDoceMeses
+    return
+  }
+  errorFechas.value = ''
+  periodoDesde.value = desde.value
+  periodoHasta.value = hasta.value
+  estadoSeleccionado.value = null
+}
+
+function seleccionarHoy() {
+  desde.value = fechaHoy
+  hasta.value = fechaHoy
+  periodoDesde.value = fechaHoy
+  periodoHasta.value = fechaHoy
+  errorFechas.value = ''
+  estadoSeleccionado.value = null
+}
+
+const esPeriodoHoy = computed(() => periodoDesde.value === fechaHoy && periodoHasta.value === fechaHoy)
+
+const columnasResumen: ColumnaTabla[] = [
+  { clave: 'folio', etiqueta: 'Folio' },
+  { clave: 'cliente', etiqueta: 'Cliente' },
+  { clave: 'fecha', etiqueta: 'Fecha' },
+  { clave: 'estado', etiqueta: 'Estado' },
+  { clave: 'formaPago', etiqueta: 'Forma de pago' },
+  { clave: 'cantidad', etiqueta: 'Cantidad', alineacion: 'derecha' },
+  { clave: 'total', etiqueta: 'Importe', alineacion: 'derecha' },
+]
+
+const columnasCorte: ColumnaTabla[] = [
+  { clave: 'codigo', etiqueta: 'Código de venta' },
+  { clave: 'cliente', etiqueta: 'Cliente' },
+  { clave: 'fecha', etiqueta: 'Fecha' },
+  { clave: 'cantidad', etiqueta: 'Cantidad', alineacion: 'derecha' },
+  { clave: 'total', etiqueta: 'Total pagado', alineacion: 'derecha' },
+  { clave: 'estadoCorte', etiqueta: 'Corte', alineacion: 'centro' },
+]
+
+// Pedidos cuyo registro cae dentro del periodo válido aplicado
+const pedidosPeriodo = computed(() =>
+  pedidos.value
+    .filter((pedido) => {
+      const fechaBase = (pedido.fechaRegistro || pedido.fechaEntrega || '').slice(0, 10)
+      if (!fechaBase) return false
+      return fechaBase >= periodoDesde.value && fechaBase <= periodoHasta.value
+    })
+    .sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro) || b.id - a.id),
 )
 
-const hayFiltros = computed(() => desde.value !== '' || hasta.value !== '')
+const pedidosEntregadosPeriodo = computed(() =>
+  pedidosPeriodo.value.filter((pedido) => pedido.estatus === ESTATUS.completado),
+)
 
-const ventasEntregadas = computed(() =>
+// Indicadores principales
+const totalVendidoPeriodo = computed(() =>
+  pedidosEntregadosPeriodo.value.reduce((acumulado, pedido) => acumulado + pedido.total, 0),
+)
+
+const totalKilosVendidosPeriodo = computed(() =>
+  pedidosEntregadosPeriodo.value.reduce((acumulado, pedido) => acumulado + pedido.totalKg, 0),
+)
+
+const totalPedidosPeriodo = computed(() => pedidosPeriodo.value.length)
+
+// Desglose por estado (Figura 17 y A3)
+const pedidosPorEstado = computed(() => {
+  const total = totalPedidosPeriodo.value
+  return ESTADOS_FILTRO.map((estado) => {
+    const cantidad = pedidosPeriodo.value.filter((pedido) => pedido.estatus === estado.estatus).length
+    const porcentaje = total > 0 ? Math.round((cantidad / total) * 100) : 0
+    return {
+      ...estado,
+      cantidad,
+      porcentaje,
+    }
+  })
+})
+
+// Ventas entregadas agrupadas por forma de pago
+const ventasPorFormaPago = computed(() => {
+  const grupos = [
+    { clave: 'efectivo', etiqueta: 'Efectivo', coincidencia: (m: number | null) => m === METODO_PAGO.efectivo },
+    {
+      clave: 'transferencia',
+      etiqueta: 'Crédito o transferencia',
+      coincidencia: (m: number | null) => m === METODO_PAGO.creditoOTransferencia,
+    },
+    { clave: 'mixto', etiqueta: 'Mixto', coincidencia: (m: number | null) => m === METODO_PAGO.mixto },
+    {
+      clave: 'pendiente',
+      etiqueta: 'Pendiente / sin registrar',
+      coincidencia: (m: number | null) => m === null || m === METODO_PAGO.pendiente,
+    },
+  ]
+
+  return grupos.map((grupo) => {
+    const lista = pedidosEntregadosPeriodo.value.filter((pedido) => grupo.coincidencia(pedido.metodoPago))
+    const monto = lista.reduce((acumulado, pedido) => acumulado + pedido.total, 0)
+    return {
+      clave: grupo.clave,
+      etiqueta: grupo.etiqueta,
+      cantidad: lista.length,
+      monto,
+    }
+  })
+})
+
+function formatearFechaHoraEvento(valor: string): string {
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return valor || SIN_DATO
+  return fecha.toLocaleString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// Cancelaciones del periodo con motivo desde PedidosEventosAppVentas
+const cancelacionesPeriodo = computed(() =>
+  pedidosPeriodo.value
+    .filter((pedido) => pedido.estatus === ESTATUS.cancelado)
+    .map((pedido) => {
+      const eventoCancelacion = [...(pedido.eventos ?? [])]
+        .reverse()
+        .find((ev) => ev.estadoResultante === ESTATUS.cancelado || ev.accion.toLowerCase().includes('cancel'))
+      const nota = leerObservaciones(pedido.observaciones).notas
+      return {
+        id: pedido.id,
+        cliente: directorio.nombreCliente(pedido.idCliente),
+        fecha: eventoCancelacion ? formatearFechaHoraEvento(eventoCancelacion.fechaHora) : formatearFecha(pedido.fechaRegistro),
+        usuario: eventoCancelacion?.usuario || null,
+        motivo: eventoCancelacion?.motivo || nota || 'Sin motivo especificado',
+      }
+    }),
+)
+
+// Entregas no realizadas registradas en PedidosEventosAppVentas para pedidos del periodo
+const entregasFallidasPeriodo = computed(() => {
+  const registros: {
+    clave: string
+    id: number
+    cliente: string
+    fecha: string
+    usuario: string
+    motivo: string
+  }[] = []
+
+  for (const pedido of pedidosPeriodo.value) {
+    for (const evento of pedido.eventos ?? []) {
+      const esFallida =
+        (evento.estadoAnterior === ESTATUS.enReparto && evento.estadoResultante === ESTATUS.surtido) ||
+        evento.accion.toLowerCase().includes('fallida') ||
+        evento.accion.toLowerCase().includes('no entreg')
+
+      if (esFallida) {
+        registros.push({
+          clave: `${pedido.id}-${evento.id}`,
+          id: pedido.id,
+          cliente: directorio.nombreCliente(pedido.idCliente),
+          fecha: formatearFechaHoraEvento(evento.fechaHora),
+          usuario: evento.usuario,
+          motivo: evento.motivo || 'Sin motivo especificado',
+        })
+      }
+    }
+  }
+
+  return registros
+})
+
+const totalIncidenciasPeriodo = computed(
+  () => cancelacionesPeriodo.value.length + entregasFallidasPeriodo.value.length,
+)
+
+// A3. Tabla de pedidos del periodo filtrada por el estado seleccionado
+const pedidosTablaResumen = computed(() => {
+  const base =
+    estadoSeleccionado.value === null
+      ? pedidosPeriodo.value
+      : pedidosPeriodo.value.filter((pedido) => pedido.estatus === estadoSeleccionado.value)
+
+  return base.map((pedido) => ({
+    id: pedido.id,
+    cliente: directorio.nombreCliente(pedido.idCliente),
+    fecha: pedido.fechaRegistro || pedido.fechaEntrega || '',
+    estado: estadoDePedido(pedido.estatus),
+    formaPago: textoMetodoPago(pedido.metodoPago) ?? SIN_DATO,
+    totalKg: pedido.totalKg,
+    total: pedido.total,
+  }))
+})
+
+const etiquetaEstadoSeleccionado = computed(() =>
+  estadoSeleccionado.value === null ? '' : estadoDePedido(estadoSeleccionado.value).etiqueta,
+)
+
+function alternarEstadoSeleccionado(estatus: number) {
+  estadoSeleccionado.value = estadoSeleccionado.value === estatus ? null : estatus
+}
+
+// --- Pestaña Corte (intacta) ---
+const mapaCortesPorPedido = computed(
+  () => new Map(pedidosCortados.value.map((item) => [item.idPedido, item])),
+)
+
+const ventasEntregadasTodas = computed(() =>
   pedidos.value
     .filter((pedido) => pedido.estatus === ESTATUS.completado)
     .map((pedido) => ({
@@ -93,28 +317,8 @@ const ventasEntregadas = computed(() =>
     .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id),
 )
 
-const ventasFiltradas = computed(() => {
-  if (errorFechas.value) return ventasEntregadas.value
-
-  return ventasEntregadas.value.filter((venta) => {
-    const fechaSola = venta.fecha.slice(0, 10)
-    if (desde.value && fechaSola < desde.value) return false
-    if (hasta.value && fechaSola > hasta.value) return false
-    return true
-  })
-})
-
-const totalKilos = computed(() =>
-  ventasFiltradas.value.reduce((acumulado, venta) => acumulado + venta.totalKg, 0),
-)
-
-const totalDinero = computed(() =>
-  ventasFiltradas.value.reduce((acumulado, venta) => acumulado + venta.total, 0),
-)
-
-// Pedidos entregados del día actual para la pestaña de Corte
 const ventasHoy = computed(() =>
-  ventasEntregadas.value.filter((venta) => venta.fecha.slice(0, 10) === fechaHoy),
+  ventasEntregadasTodas.value.filter((venta) => venta.fecha.slice(0, 10) === fechaHoy),
 )
 
 const ventasHoySinCorte = computed(() =>
@@ -125,24 +329,27 @@ const totalDineroHoy = computed(() =>
   ventasHoySinCorte.value.reduce((acumulado, venta) => acumulado + venta.total, 0),
 )
 
-async function cargarVentas() {
-  if (esAdministrador) {
-  ordenPendiente.value = await obtenerOrdenCortePendiente().catch(() => null)
-}
-if (esAdministrador) {
-  const [pendiente, cortados] = await Promise.all([
-    obtenerOrdenCortePendiente().catch(() => null),
-    obtenerPedidosCortados().catch(() => []),
-  ])
-  ordenPendiente.value = pendiente
-  pedidosCortados.value = cortados
-}
+async function cargarResumen() {
   cargando.value = true
   errorCarga.value = false
   try {
-    const [lista] = await Promise.all([obtenerPedidos(), directorio.cargarClientes()])
+    const promesasCorte = esAdministrador
+      ? Promise.all([
+          obtenerOrdenCortePendiente().catch(() => null),
+          obtenerPedidosCortados().catch(() => []),
+        ])
+      : Promise.resolve([null, []] as [OrdenCorte | null, PedidoCortado[]])
+
+    const [lista, , [pendiente, cortados]] = await Promise.all([
+      obtenerPedidos({ incluirEventos: true }),
+      directorio.cargarClientes(),
+      promesasCorte,
+    ])
     pedidos.value = lista
+    ordenPendiente.value = pendiente
+    pedidosCortados.value = cortados
   } catch (error) {
+    pedidos.value = []
     if (error instanceof ErrorPedidos && error.motivo === 'sesion') {
       salirPorSesionVencida(enrutador)
       return
@@ -151,11 +358,6 @@ if (esAdministrador) {
   } finally {
     cargando.value = false
   }
-}
-
-function limpiarFiltros() {
-  desde.value = ''
-  hasta.value = ''
 }
 
 function abrirDetallePedido(id: number) {
@@ -192,50 +394,61 @@ async function darOrdenDeCorte() {
 }
 
 function descargarExcel() {
-  if (ventasFiltradas.value.length === 0) return
+  if (pedidosTablaResumen.value.length === 0) return
 
-  const filas = ventasFiltradas.value.map((venta) => ({
-    'Código de venta': `#${venta.id}`,
-    Cliente: venta.cliente,
-    Fecha: formatearFecha(venta.fecha) || SIN_DATO,
-    'Cantidad (kg)': Number(venta.totalKg.toFixed(2)),
-    'Total pagado ($)': Number(venta.total.toFixed(2)),
+  const filas = pedidosTablaResumen.value.map((fila) => ({
+    Folio: `#${fila.id}`,
+    Cliente: fila.cliente,
+    Fecha: formatearFecha(fila.fecha) || SIN_DATO,
+    Estado: fila.estado.etiqueta,
+    'Forma de pago': fila.formaPago,
+    'Cantidad (kg)': Number(fila.totalKg.toFixed(2)),
+    'Importe ($)': Number(fila.total.toFixed(2)),
   }))
 
+  const totalKgLista = pedidosTablaResumen.value.reduce((acc, f) => acc + f.totalKg, 0)
+  const totalMontoLista = pedidosTablaResumen.value.reduce((acc, f) => acc + f.total, 0)
+
   filas.push({
-    'Código de venta': '',
+    Folio: '',
     Cliente: 'TOTAL',
-    Fecha: `${ventasFiltradas.value.length} ventas`,
-    'Cantidad (kg)': Number(totalKilos.value.toFixed(2)),
-    'Total pagado ($)': Number(totalDinero.value.toFixed(2)),
+    Fecha: `${pedidosTablaResumen.value.length} pedidos`,
+    Estado: etiquetaEstadoSeleccionado.value || 'Todos',
+    'Forma de pago': '',
+    'Cantidad (kg)': Number(totalKgLista.toFixed(2)),
+    'Importe ($)': Number(totalMontoLista.toFixed(2)),
   })
 
-  const hoja = XLSX.utils.json_to_sheet(filas)
-
-  hoja['!cols'] = [
+  const hojaPedidos = XLSX.utils.json_to_sheet(filas)
+  hojaPedidos['!cols'] = [
+    { wch: 12 },
+    { wch: 30 },
+    { wch: 14 },
     { wch: 16 },
-    { wch: 32 },
-    { wch: 16 },
+    { wch: 24 },
     { wch: 15 },
-    { wch: 18 },
+    { wch: 16 },
   ]
 
+  const hojaResumen = XLSX.utils.json_to_sheet([
+    { Indicador: 'Periodo', Valor: `${periodoDesde.value} a ${periodoHasta.value}` },
+    { Indicador: 'Total vendido (entregados)', Valor: Number(totalVendidoPeriodo.value.toFixed(2)) },
+    { Indicador: 'Kilos vendidos (entregados)', Valor: Number(totalKilosVendidosPeriodo.value.toFixed(2)) },
+    { Indicador: 'Número de pedidos', Valor: totalPedidosPeriodo.value },
+    { Indicador: 'Entregados', Valor: pedidosEntregadosPeriodo.value.length },
+    { Indicador: 'Cancelaciones', Valor: cancelacionesPeriodo.value.length },
+    { Indicador: 'Entregas no realizadas', Valor: entregasFallidasPeriodo.value.length },
+  ])
+  hojaResumen['!cols'] = [{ wch: 30 }, { wch: 28 }]
+
   const libro = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(libro, hoja, 'Ventas')
+  XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen')
+  XLSX.utils.book_append_sheet(libro, hojaPedidos, 'Pedidos')
 
-  const sufijoFechas =
-    desde.value && hasta.value
-      ? `${desde.value}_a_${hasta.value}`
-      : desde.value
-        ? `desde_${desde.value}`
-        : hasta.value
-          ? `hasta_${hasta.value}`
-          : 'todas'
-
-  XLSX.writeFile(libro, `reporte-ventas_${sufijoFechas}.xlsx`)
+  XLSX.writeFile(libro, `resumen-ventas_${periodoDesde.value}_a_${periodoHasta.value}.xlsx`)
 }
 
-onMounted(cargarVentas)
+onMounted(cargarResumen)
 </script>
 
 <template>
@@ -249,15 +462,25 @@ onMounted(cargarVentas)
       <div class="reportes__encabezado">
         <div>
           <h1 class="reportes__titulo">
-            {{ pestanaActiva === 'corte' ? 'Corte del Día' : 'Reportes de Ventas' }}
+            {{ pestanaActiva === 'corte' ? 'Corte del Día' : 'Supervisión de ventas y operación' }}
           </h1>
           <p class="reportes__subtitulo">
             {{
               pestanaActiva === 'corte'
                 ? 'Monitorea el efectivo y los pedidos entregados hoy para solicitar el corte.'
-                : 'Consulta las ventas concluidas (pedidos entregados) y los totales generados por rango de fechas.'
+                : 'Monitorea las ventas del periodo, el avance de los pedidos por estado, las formas de pago y las incidencias.'
             }}
           </p>
+        </div>
+
+        <div v-if="pestanaActiva === 'resumen'" class="reportes__accion-header">
+          <BotonVue
+            variante="exito"
+            :deshabilitado="cargando || errorCarga || !!errorFechas || pedidosTablaResumen.length === 0"
+            @click="descargarExcel"
+          >
+            Exportar resumen
+          </BotonVue>
         </div>
       </div>
 
@@ -267,11 +490,11 @@ onMounted(cargarVentas)
           type="button"
           role="tab"
           class="pestanas__boton"
-          :class="{ 'pestanas__boton--activa': pestanaActiva === 'ventas' }"
-          :aria-selected="pestanaActiva === 'ventas'"
-          @click="pestanaActiva = 'ventas'"
+          :class="{ 'pestanas__boton--activa': pestanaActiva === 'resumen' }"
+          :aria-selected="pestanaActiva === 'resumen'"
+          @click="pestanaActiva = 'resumen'"
         >
-          Reportes de ventas
+          Resumen de ventas y operación
         </button>
 
         <button
@@ -286,8 +509,8 @@ onMounted(cargarVentas)
         </button>
       </div>
 
-      <!-- PESTAÑA 1: REPORTES DE VENTAS -->
-      <template v-if="pestanaActiva === 'ventas'">
+      <!-- PESTAÑA 1: RESUMEN DE VENTAS Y OPERACIÓN (CU-15 / RF-ADM-01) -->
+      <template v-if="pestanaActiva === 'resumen'">
         <div class="filtros">
           <div class="filtros__campo">
             <label for="reportes-desde" class="filtros__etiqueta">Desde</label>
@@ -297,6 +520,7 @@ onMounted(cargarVentas)
               type="date"
               class="filtros__input"
               :aria-invalid="!!errorFechas"
+              @change="aplicarPeriodo"
             />
           </div>
 
@@ -308,6 +532,7 @@ onMounted(cargarVentas)
               type="date"
               class="filtros__input"
               :aria-invalid="!!errorFechas"
+              @change="aplicarPeriodo"
             />
           </div>
 
@@ -315,98 +540,246 @@ onMounted(cargarVentas)
             <BotonVue
               variante="secundario"
               compacto
-              :deshabilitado="!hayFiltros"
-              @click="limpiarFiltros"
+              :deshabilitado="esPeriodoHoy && !errorFechas"
+              @click="seleccionarHoy"
             >
-              Limpiar filtros
+              Hoy
             </BotonVue>
           </div>
         </div>
 
+        <!-- A1. Periodo no válido -->
         <p v-if="errorFechas" class="reportes__error-fechas" role="alert">
           {{ errorFechas }}
         </p>
 
-        <section class="reportes__seccion">
-          <EncabezadoSeccionVue titulo="Ventas Entregadas" icono="reportes" />
+        <div v-if="cargando" class="reportes__estado-caja" role="status">
+          Consolidando información del periodo…
+        </div>
 
-          <TablaVue :columnas="columnas" :alto-maximo="360">
-            <tr v-if="cargando">
-              <td :colspan="columnas.length" class="reportes__mensaje">
-                <p role="status">Cargando ventas…</p>
-              </td>
-            </tr>
-
-            <tr v-else-if="errorCarga">
-              <td :colspan="columnas.length" class="reportes__mensaje">
-                <p class="reportes__error" role="alert">No fue posible cargar las ventas. Intente nuevamente.</p>
-                <div class="reportes__reintentar">
-                  <BotonVue variante="secundario" compacto @click="cargarVentas">Reintentar</BotonVue>
-                </div>
-              </td>
-            </tr>
-
-            <tr v-else-if="ventasEntregadas.length === 0">
-              <td :colspan="columnas.length" class="reportes__mensaje">
-                Todavía no hay ventas entregadas registradas.
-              </td>
-            </tr>
-
-            <tr v-else-if="ventasFiltradas.length === 0">
-              <td :colspan="columnas.length" class="reportes__mensaje">
-                No hay ventas entregadas en el rango de fechas seleccionado.
-              </td>
-            </tr>
-
-            <template v-else>
-              <tr
-                v-for="venta in ventasFiltradas"
-                :key="venta.id"
-                class="fila-clicable"
-                @click="abrirDetallePedido(venta.id)"
-              >
-                <td>
-                  <RouterLink
-                    :to="{ name: 'detalle-pedido', params: { id: venta.id } }"
-                    class="reportes__folio"
-                    @click.stop
-                  >
-                    #{{ venta.id }}
-                  </RouterLink>
-                </td>
-                <td class="reportes__cliente">{{ venta.cliente }}</td>
-                <td>{{ formatearFecha(venta.fecha) || SIN_DATO }}</td>
-                <td class="tabla__celda--derecha">{{ formatearKg(venta.totalKg) }}</td>
-                <td class="tabla__celda--derecha reportes__total">{{ formatearMoneda(venta.total) }}</td>
-              </tr>
-            </template>
-          </TablaVue>
-        </section>
-
-        <div v-if="!cargando && !errorCarga" class="resumen">
-          <div class="resumen__tarjeta">
-            <span class="resumen__etiqueta">Ventas en el rango</span>
-            <strong class="resumen__valor">{{ ventasFiltradas.length }}</strong>
-          </div>
-
-          <div class="resumen__tarjeta">
-            <span class="resumen__etiqueta">Total de kilos</span>
-            <strong class="resumen__valor">{{ formatearKg(totalKilos) }}</strong>
-          </div>
-
-          <div class="resumen__tarjeta resumen__tarjeta--destacada">
-            <span class="resumen__etiqueta">Total pagado</span>
-            <strong class="resumen__valor resumen__valor--primario">{{ formatearMoneda(totalDinero) }}</strong>
+        <!-- E1. Error al consolidar (sin mostrar indicadores parciales) -->
+        <div v-else-if="errorCarga" class="reportes__estado-caja reportes__estado-caja--error" role="alert">
+          <p class="reportes__error">{{ MENSAJES_RESUMEN.errorConsolidar }}</p>
+          <div class="reportes__reintentar">
+            <BotonVue variante="secundario" compacto @click="cargarResumen">Reintentar</BotonVue>
           </div>
         </div>
 
-        <BotonVue
-          variante="primario"
-          :deshabilitado="cargando || errorCarga || !!errorFechas || ventasFiltradas.length === 0"
-          @click="descargarExcel"
-        >
-          Descargar Excel
-        </BotonVue>
+        <template v-else>
+          <!-- A2. Periodo sin información -->
+          <div v-if="totalPedidosPeriodo === 0" class="reportes__aviso-vacio" role="status">
+            <IconoVue nombre="alerta" :tamano="18" />
+            <span>{{ MENSAJES_RESUMEN.sinRegistros }}</span>
+          </div>
+
+          <!-- KPIs principales -->
+          <div class="resumen">
+            <div class="resumen__tarjeta resumen__tarjeta--destacada">
+              <span class="resumen__etiqueta">Total vendido (entregados)</span>
+              <strong class="resumen__valor resumen__valor--primario">
+                {{ formatearMoneda(totalVendidoPeriodo) }}
+              </strong>
+              <span class="resumen__nota">{{ formatearKg(totalKilosVendidosPeriodo) }} entregados</span>
+            </div>
+
+            <div class="resumen__tarjeta">
+              <span class="resumen__etiqueta">Pedidos del periodo</span>
+              <strong class="resumen__valor">{{ totalPedidosPeriodo }}</strong>
+              <span class="resumen__nota">
+                {{ formatearFecha(periodoDesde) }} – {{ formatearFecha(periodoHasta) }}
+              </span>
+            </div>
+
+            <div class="resumen__tarjeta">
+              <span class="resumen__etiqueta">Entregados</span>
+              <strong class="resumen__valor">{{ pedidosEntregadosPeriodo.length }}</strong>
+              <span class="resumen__nota">
+                {{
+                  totalPedidosPeriodo > 0
+                    ? `${Math.round((pedidosEntregadosPeriodo.length / totalPedidosPeriodo) * 100)}% del total`
+                    : '0% del total'
+                }}
+              </span>
+            </div>
+
+            <div class="resumen__tarjeta">
+              <span class="resumen__etiqueta">Incidencias</span>
+              <strong class="resumen__valor">{{ totalIncidenciasPeriodo }}</strong>
+              <span class="resumen__nota">
+                {{ cancelacionesPeriodo.length }} cancel. · {{ entregasFallidasPeriodo.length }} no entreg.
+              </span>
+            </div>
+          </div>
+
+          <!-- Pedidos por estado (Figura 17 + A3 interactivo) -->
+          <section class="tarjeta">
+            <div class="tarjeta__cabecera">
+              <EncabezadoSeccionVue titulo="Pedidos por estado" icono="reportes" />
+              <span class="tarjeta__ayuda">Haz clic en un estado para consultar sus pedidos</span>
+            </div>
+
+            <div class="barras">
+              <button
+                v-for="item in pedidosPorEstado"
+                :key="item.estatus"
+                type="button"
+                class="barra"
+                :class="{ 'barra--activa': estadoSeleccionado === item.estatus }"
+                :aria-pressed="estadoSeleccionado === item.estatus"
+                @click="alternarEstadoSeleccionado(item.estatus)"
+              >
+                <div class="barra__etiqueta">
+                  <ChipEstadoVue :estado="item.chip" :etiqueta="item.etiqueta" />
+                </div>
+
+                <div class="barra__pista" aria-hidden="true">
+                  <div
+                    class="barra__relleno"
+                    :style="{
+                      width: `${item.porcentaje}%`,
+                      backgroundColor: item.colorPunto,
+                    }"
+                  ></div>
+                </div>
+
+                <div class="barra__cifras">
+                  <strong>{{ item.cantidad }}</strong>
+                  <span>{{ item.porcentaje }}%</span>
+                </div>
+              </button>
+            </div>
+
+            <div class="barras__pie">
+              <span>Total de pedidos del periodo</span>
+              <strong>{{ totalPedidosPeriodo }} {{ totalPedidosPeriodo === 1 ? 'pedido' : 'pedidos' }}</strong>
+            </div>
+          </section>
+
+          <!-- Ventas por forma de pago + Cancelaciones y entregas no realizadas -->
+          <div class="rejilla-secundaria">
+            <section class="tarjeta">
+              <EncabezadoSeccionVue titulo="Ventas por forma de pago" icono="caja" />
+
+              <ul class="lista-pagos">
+                <li v-for="pago in ventasPorFormaPago" :key="pago.clave" class="lista-pagos__item">
+                  <div>
+                    <p class="lista-pagos__nombre">{{ pago.etiqueta }}</p>
+                    <p class="lista-pagos__detalle">
+                      {{ pago.cantidad }} {{ pago.cantidad === 1 ? 'pedido entregado' : 'pedidos entregados' }}
+                    </p>
+                  </div>
+                  <strong class="lista-pagos__monto">{{ formatearMoneda(pago.monto) }}</strong>
+                </li>
+              </ul>
+            </section>
+
+            <section class="tarjeta">
+              <EncabezadoSeccionVue titulo="Cancelaciones y entregas no realizadas" icono="alerta" />
+
+              <div class="incidencias">
+                <div>
+                  <h3 class="incidencias__subtitulo">
+                    Cancelaciones ({{ cancelacionesPeriodo.length }})
+                  </h3>
+                  <p v-if="cancelacionesPeriodo.length === 0" class="incidencias__vacio">
+                    Sin cancelaciones en el periodo.
+                  </p>
+                  <ul v-else class="incidencias__lista">
+                    <li v-for="item in cancelacionesPeriodo" :key="item.id" class="incidencias__item">
+                      <div class="incidencias__top">
+                        <RouterLink :to="{ name: 'detalle-pedido', params: { id: item.id } }" class="reportes__folio">
+                          #{{ item.id }}
+                        </RouterLink>
+                        <span class="incidencias__cliente">{{ item.cliente }}</span>
+                        <span class="incidencias__fecha">{{ item.fecha }}</span>
+                      </div>
+                      <p class="incidencias__motivo">Motivo: {{ item.motivo }}</p>
+                    </li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 class="incidencias__subtitulo">
+                    Entregas no realizadas ({{ entregasFallidasPeriodo.length }})
+                  </h3>
+                  <p v-if="entregasFallidasPeriodo.length === 0" class="incidencias__vacio">
+                    Sin entregas no realizadas en el periodo.
+                  </p>
+                  <ul v-else class="incidencias__lista">
+                    <li v-for="item in entregasFallidasPeriodo" :key="item.clave" class="incidencias__item">
+                      <div class="incidencias__top">
+                        <RouterLink :to="{ name: 'detalle-pedido', params: { id: item.id } }" class="reportes__folio">
+                          #{{ item.id }}
+                        </RouterLink>
+                        <span class="incidencias__cliente">{{ item.cliente }}</span>
+                        <span class="incidencias__fecha">{{ item.fecha }}</span>
+                      </div>
+                      <p class="incidencias__motivo">Motivo: {{ item.motivo }} ({{ item.usuario }})</p>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- A3. Consulta de pedidos del periodo (filtrable por estado) -->
+          <section class="reportes__seccion">
+            <div class="tarjeta__cabecera">
+              <EncabezadoSeccionVue
+                :titulo="
+                  etiquetaEstadoSeleccionado
+                    ? `Pedidos del periodo · Estado: ${etiquetaEstadoSeleccionado}`
+                    : 'Pedidos del periodo'
+                "
+                icono="pedidos"
+              />
+              <div v-if="estadoSeleccionado !== null" class="filtros__accion">
+                <BotonVue variante="secundario" compacto @click="estadoSeleccionado = null">
+                  Ver todos los estados
+                </BotonVue>
+              </div>
+            </div>
+
+            <TablaVue :columnas="columnasResumen" :alto-maximo="320">
+              <tr v-if="totalPedidosPeriodo === 0">
+                <td :colspan="columnasResumen.length" class="reportes__mensaje">
+                  {{ MENSAJES_RESUMEN.sinRegistros }}
+                </td>
+              </tr>
+
+              <tr v-else-if="pedidosTablaResumen.length === 0">
+                <td :colspan="columnasResumen.length" class="reportes__mensaje">
+                  No hay pedidos en estado {{ etiquetaEstadoSeleccionado }} dentro del periodo seleccionado.
+                </td>
+              </tr>
+
+              <template v-else>
+                <tr
+                  v-for="fila in pedidosTablaResumen"
+                  :key="fila.id"
+                  class="fila-clicable"
+                  @click="abrirDetallePedido(fila.id)"
+                >
+                  <td>
+                    <RouterLink
+                      :to="{ name: 'detalle-pedido', params: { id: fila.id } }"
+                      class="reportes__folio"
+                      @click.stop
+                    >
+                      #{{ fila.id }}
+                    </RouterLink>
+                  </td>
+                  <td class="reportes__cliente">{{ fila.cliente }}</td>
+                  <td>{{ formatearFecha(fila.fecha) || SIN_DATO }}</td>
+                  <td><ChipEstadoVue :estado="fila.estado.chip" :etiqueta="fila.estado.etiqueta" /></td>
+                  <td>{{ fila.formaPago }}</td>
+                  <td class="tabla__celda--derecha">{{ formatearKg(fila.totalKg) }}</td>
+                  <td class="tabla__celda--derecha reportes__total">{{ formatearMoneda(fila.total) }}</td>
+                </tr>
+              </template>
+            </TablaVue>
+          </section>
+        </template>
       </template>
 
       <!-- PESTAÑA 2: CORTE (solo Administrador) -->
@@ -428,7 +801,7 @@ onMounted(cargarVentas)
               <td :colspan="columnasCorte.length" class="reportes__mensaje">
                 <p class="reportes__error" role="alert">No fue posible cargar los pedidos. Intente nuevamente.</p>
                 <div class="reportes__reintentar">
-                  <BotonVue variante="secundario" compacto @click="cargarVentas">Reintentar</BotonVue>
+                  <BotonVue variante="secundario" compacto @click="cargarResumen">Reintentar</BotonVue>
                 </div>
               </td>
             </tr>
@@ -490,19 +863,21 @@ onMounted(cargarVentas)
             <strong class="resumen__valor resumen__valor--primario">{{ formatearMoneda(totalDineroHoy) }}</strong>
           </div>
 
-          <BotonVue
-            variante="primario"
-            :deshabilitado="enviandoCorte || ventasHoySinCorte.length === 0 || !!ordenPendiente"
-            @click="darOrdenDeCorte"
-          >
-            {{
-              ordenPendiente
-                ? 'Orden de corte pendiente'
-                : enviandoCorte
-                  ? 'Enviando orden…'
-                  : 'Dar orden de corte'
-            }}
-          </BotonVue>
+          <div class="corte__accion">
+            <BotonVue
+              variante="primario"
+              :deshabilitado="enviandoCorte || ventasHoySinCorte.length === 0 || !!ordenPendiente"
+              @click="darOrdenDeCorte"
+            >
+              {{
+                ordenPendiente
+                  ? 'Orden de corte pendiente'
+                  : enviandoCorte
+                    ? 'Enviando orden…'
+                    : 'Dar orden de corte'
+              }}
+            </BotonVue>
+          </div>
         </div>
 
         <div v-if="ordenPendiente" class="corte__codigo-caja" role="status">
@@ -525,78 +900,22 @@ onMounted(cargarVentas)
 </template>
 
 <style scoped>
-.corte__codigo-caja {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 20px;
-  border: 1px solid var(--gf-entregado-punto, #16a34a);
-  border-radius: 10px;
-  background: var(--gf-entregado-bg, #f0fdf4);
-  color: var(--gf-entregado-fg, #166534);
-}
-
-.corte__codigo-titulo {
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.corte__codigo-subtitulo {
-  margin-top: 4px;
-  font-size: 13px;
-}
-
-.corte__codigo-valor {
-  padding: 10px 18px;
-  border: 1px dashed var(--gf-entregado-punto, #16a34a);
-  border-radius: 8px;
-  background: var(--gf-superficie, #ffffff);
-  color: var(--gf-primario);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0.25em;
-  text-indent: 0.25em;
-}
-
-.fila-cortada {
-  opacity: 0.72;
-}
-
-.etiqueta-corte {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.etiqueta-corte--confirmado {
-  background: var(--gf-entregado-bg, #f0fdf4);
-  color: var(--gf-entregado-fg, #166534);
-}
-
-.etiqueta-corte--pendiente {
-  background: var(--gf-preparacion-bg, #fffbeb);
-  color: var(--gf-preparacion-fg, #92400e);
-}
-
-.etiqueta-corte--sin-corte {
-  background: var(--gf-fondo);
-  color: var(--gf-texto-tenue);
-}
-
 .reportes {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-.reportes :where(p) {
+.reportes :where(p, h3) {
   margin: 0;
+}
+
+.reportes__encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .reportes__titulo {
@@ -612,12 +931,8 @@ onMounted(cargarVentas)
   font-size: 14px;
 }
 
-.reportes__encabezado {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+.reportes__accion-header {
+  flex: none;
 }
 
 .pestanas {
@@ -685,14 +1000,294 @@ onMounted(cargarVentas)
   outline-offset: 1px;
 }
 
+.filtros__input[aria-invalid='true'] {
+  border-color: var(--gf-cancelado-punto);
+}
+
 .filtros__accion {
   flex: none;
 }
 
 .reportes__error-fechas {
-  margin-top: -8px;
+  margin-top: -10px;
   color: var(--gf-cancelado-fg);
   font-size: 13px;
+  font-weight: 500;
+}
+
+.reportes__estado-caja {
+  padding: 32px 16px;
+  border: 1px solid var(--gf-borde);
+  border-radius: var(--gf-radio, 8px);
+  background: var(--gf-superficie);
+  color: var(--gf-texto-tenue);
+  font-size: 14px;
+  text-align: center;
+}
+
+.reportes__estado-caja--error {
+  border-color: var(--gf-cancelado-punto);
+}
+
+.reportes__aviso-vacio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--gf-borde);
+  border-radius: var(--gf-radio, 8px);
+  background: var(--gf-fondo);
+  color: var(--gf-texto-tenue);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.resumen {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.resumen__tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--gf-borde);
+  border-radius: var(--gf-radio, 8px);
+  background: var(--gf-superficie);
+}
+
+.resumen__tarjeta--destacada {
+  border-color: color-mix(in srgb, var(--gf-primario) 35%, var(--gf-borde));
+}
+
+.resumen__etiqueta {
+  color: var(--gf-texto-tenue);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.resumen__valor {
+  color: var(--gf-texto);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.resumen__valor--primario {
+  color: var(--gf-primario);
+}
+
+.resumen__nota {
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
+}
+
+.tarjeta {
+  padding: 18px 20px;
+  border: 1px solid var(--gf-borde);
+  border-radius: var(--gf-radio, 8px);
+  background: var(--gf-superficie);
+}
+
+.tarjeta__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+
+.tarjeta__cabecera :deep(> :first-child) {
+  margin-bottom: 0;
+}
+
+.tarjeta__ayuda {
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
+}
+
+/* Barras horizontales de pedidos por estado (Figura 17) */
+.barras {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.barra {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) 86px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.barra:hover {
+  background: var(--gf-fondo);
+}
+
+.barra--activa {
+  border-color: var(--gf-secundario);
+  background: color-mix(in srgb, var(--gf-secundario) 8%, var(--gf-superficie));
+}
+
+.barra__etiqueta {
+  display: flex;
+  align-items: center;
+}
+
+.barra__pista {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--gf-fondo);
+}
+
+.barra__relleno {
+  height: 100%;
+  min-width: 0;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.barra__cifras {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--gf-texto-tenue);
+}
+
+.barra__cifras strong {
+  color: var(--gf-texto);
+}
+
+.barras__pie {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gf-borde);
+  color: var(--gf-texto-tenue);
+  font-size: 13px;
+}
+
+.barras__pie strong {
+  color: var(--gf-texto);
+}
+
+.rejilla-secundaria {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.lista-pagos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista-pagos__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--gf-fondo);
+}
+
+.lista-pagos__nombre {
+  color: var(--gf-texto);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.lista-pagos__detalle {
+  margin-top: 2px;
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
+}
+
+.lista-pagos__monto {
+  color: var(--gf-primario);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.incidencias {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.incidencias__subtitulo {
+  margin-bottom: 8px;
+  color: var(--gf-texto);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.incidencias__vacio {
+  color: var(--gf-texto-tenue);
+  font-size: 13px;
+}
+
+.incidencias__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.incidencias__item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--gf-fondo);
+  font-size: 13px;
+}
+
+.incidencias__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.incidencias__cliente {
+  color: var(--gf-texto);
+  font-weight: 600;
+}
+
+.incidencias__fecha {
+  margin-left: auto;
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
+}
+
+.incidencias__motivo {
+  margin-top: 4px;
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
 }
 
 .reportes__seccion {
@@ -745,45 +1340,7 @@ onMounted(cargarVentas)
   background-color: var(--gf-fondo);
 }
 
-.resumen {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.resumen__tarjeta {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px 20px;
-  border: 1px solid var(--gf-borde);
-  border-radius: var(--gf-radio, 8px);
-  background: var(--gf-fondo);
-}
-
-.resumen__tarjeta--destacada {
-  border-color: color-mix(in srgb, var(--gf-primario) 30%, var(--gf-borde));
-  background: var(--gf-superficie);
-}
-
-.resumen__etiqueta {
-  color: var(--gf-texto-tenue);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.resumen__valor {
-  color: var(--gf-texto);
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.resumen__valor--primario {
-  color: var(--gf-primario);
-}
-
+/* Estilos pestaña Corte */
 .corte__pie {
   display: flex;
   flex-wrap: wrap;
@@ -797,19 +1354,97 @@ onMounted(cargarVentas)
   min-width: 240px;
 }
 
-.corte__aviso {
-  padding: 12px 16px;
-  border: 1px solid var(--gf-entregado-punto, #16a34a);
-  border-radius: 8px;
-  background: var(--gf-entregado-bg, #f0fdf4);
-  color: var(--gf-entregado-fg, #166534);
-  font-size: 14px;
-  font-weight: 600;
+.corte__accion {
+  flex: none;
 }
 
-@media (max-width: 720px) {
+.corte__codigo-caja {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--gf-entregado-punto, #16a34a);
+  border-radius: 10px;
+  background: var(--gf-entregado-bg, #f0fdf4);
+  color: var(--gf-entregado-fg, #166534);
+}
+
+.corte__codigo-titulo {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.corte__codigo-subtitulo {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.corte__codigo-valor {
+  padding: 10px 18px;
+  border: 1px dashed var(--gf-entregado-punto, #16a34a);
+  border-radius: 8px;
+  background: var(--gf-superficie, #ffffff);
+  color: var(--gf-primario);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  text-indent: 0.25em;
+}
+
+.fila-cortada {
+  opacity: 0.72;
+}
+
+.etiqueta-corte {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.etiqueta-corte--confirmado {
+  background: var(--gf-entregado-bg, #f0fdf4);
+  color: var(--gf-entregado-fg, #166534);
+}
+
+.etiqueta-corte--pendiente {
+  background: var(--gf-preparacion-bg, #fffbeb);
+  color: var(--gf-preparacion-fg, #92400e);
+}
+
+.etiqueta-corte--sin-corte {
+  background: var(--gf-fondo);
+  color: var(--gf-texto-tenue);
+}
+
+@media (max-width: 960px) {
+  .resumen {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rejilla-secundaria {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
   .resumen {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .barra {
+    grid-template-columns: 112px minmax(0, 1fr) 72px;
+    gap: 8px;
+  }
+
+  .reportes__accion-header,
+  .corte__accion {
+    width: 100%;
   }
 }
 </style>

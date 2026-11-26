@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import BotonVue from '@/componentes/BotonVue.vue'
@@ -33,6 +33,9 @@ const cargando = ref(true)
 const errorCarga = ref('')
 const busqueda = ref('')
 const filtroEstado = ref<FiltroDisponibilidad>('todos')
+
+const contenedorTabla = ref<HTMLElement | null>(null)
+const altoTabla = ref(380)
 
 const columnas: ColumnaTabla[] = esCliente
   ? [
@@ -83,6 +86,19 @@ const inventarioFiltrado = computed(() => {
   })
 })
 
+function actualizarAltoTabla() {
+  // Reserva espacio para el padding inferior de la tarjeta blanca + margen + pie de página azul.
+  const margenInferior = window.innerWidth <= 560 ? 96 : 116
+  const top = contenedorTabla.value?.getBoundingClientRect().top
+
+  if (typeof top === 'number' && top > 0) {
+    const disponible = Math.floor(window.innerHeight - top - margenInferior)
+    altoTabla.value = Math.max(240, disponible)
+  } else {
+    altoTabla.value = Math.max(240, Math.min(480, window.innerHeight - 460))
+  }
+}
+
 async function cargarInventario() {
   cargando.value = true
   errorCarga.value = ''
@@ -98,10 +114,26 @@ async function cargarInventario() {
         : 'No es posible confirmar la disponibilidad en este momento.'
   } finally {
     cargando.value = false
+    await nextTick()
+    actualizarAltoTabla()
   }
 }
 
-onMounted(cargarInventario)
+watch(errorCarga, async () => {
+  await nextTick()
+  actualizarAltoTabla()
+})
+
+onMounted(async () => {
+  await nextTick()
+  actualizarAltoTabla()
+  window.addEventListener('resize', actualizarAltoTabla)
+  cargarInventario()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', actualizarAltoTabla)
+})
 </script>
 
 <template>
@@ -142,14 +174,16 @@ onMounted(cargarInventario)
           </div>
         </div>
 
-        <BotonVue
-          variante="exito"
-          :deshabilitado="cargando || !!errorCarga"
-          @click="enrutador.push({ name: 'nuevo-pedido', query: { desde: 'inicio' } })"
-        >
-          <IconoVue nombre="mas" :tamano="16" />
-          Nuevo Pedido
-        </BotonVue>
+        <div class="inventario__accion">
+          <BotonVue
+            variante="exito"
+            :deshabilitado="cargando || !!errorCarga"
+            @click="enrutador.push({ name: 'nuevo-pedido', query: { desde: 'inicio' } })"
+          >
+            <IconoVue nombre="mas" :tamano="16" />
+            Nuevo Pedido
+          </BotonVue>
+        </div>
       </div>
 
       <!-- E1. Disponibilidad no disponible -->
@@ -204,71 +238,73 @@ onMounted(cargarInventario)
         </div>
       </div>
 
-      <section>
+      <section class="inventario__seccion">
         <EncabezadoSeccionVue titulo="Productos activos" icono="caja" />
 
-        <TablaVue :columnas="columnas">
-          <tr v-if="cargando">
-            <td :colspan="columnas.length" class="inventario__mensaje" role="status">
-              Cargando inventario…
-            </td>
-          </tr>
+        <div ref="contenedorTabla">
+          <TablaVue :columnas="columnas" :alto-maximo="altoTabla">
+            <tr v-if="cargando">
+              <td :colspan="columnas.length" class="inventario__mensaje" role="status">
+                Cargando inventario…
+              </td>
+            </tr>
 
-          <tr v-else-if="errorCarga">
-            <td :colspan="columnas.length" class="inventario__mensaje">
-              No se muestra la disponibilidad mientras persista el error de conexión.
-            </td>
-          </tr>
+            <tr v-else-if="errorCarga">
+              <td :colspan="columnas.length" class="inventario__mensaje">
+                No se muestra la disponibilidad mientras persista el error de conexión.
+              </td>
+            </tr>
 
-          <!-- A1. Sin coincidencias -->
-          <tr v-else-if="inventarioFiltrado.length === 0">
-            <td :colspan="columnas.length" class="inventario__mensaje">
-              {{
-                inventario.length
-                  ? 'No se encontraron productos con ese criterio.'
-                  : 'No hay productos activos en el catálogo.'
-              }}
-            </td>
-          </tr>
+            <!-- A1. Sin coincidencias -->
+            <tr v-else-if="inventarioFiltrado.length === 0">
+              <td :colspan="columnas.length" class="inventario__mensaje">
+                {{
+                  inventario.length
+                    ? 'No se encontraron productos con ese criterio.'
+                    : 'No hay productos activos en el catálogo.'
+                }}
+              </td>
+            </tr>
 
-          <tr
-            v-for="fila in inventarioFiltrado"
-            :key="`${fila.codigoProducto ?? fila.talla}-${fila.master}`"
-            :class="{ 'fila-agotada': !esCliente && fila.cantidadKg <= 0 }"
-          >
-            <td>
-              <p class="inventario__talla">{{ fila.talla || fila.nombre }}</p>
-              <p v-if="fila.nombre && fila.nombre !== fila.talla" class="inventario__detalle">
-                {{ fila.nombre }}
-              </p>
-              <p v-if="!esCliente && fila.cantidadKg <= 0" class="inventario__nota-agotado">
-                Agotado — no puede agregarse a un pedido.
-              </p>
-            </td>
+            <tr
+              v-for="fila in inventarioFiltrado"
+              :key="`${fila.codigoProducto ?? fila.talla}-${fila.master}`"
+              :class="{ 'fila-agotada': !esCliente && fila.cantidadKg <= 0 }"
+            >
+              <td>
+                <p class="inventario__talla">{{ fila.talla || fila.nombre }}</p>
+                <p v-if="fila.nombre && fila.nombre !== fila.talla" class="inventario__detalle">
+                  {{ fila.nombre }}
+                </p>
+                <p v-if="!esCliente && fila.cantidadKg <= 0" class="inventario__nota-agotado">
+                  Agotado — no puede agregarse a un pedido.
+                </p>
+              </td>
 
-            <td v-if="!esCliente">{{ fila.codigoProducto ?? '—' }}</td>
+              <td v-if="!esCliente">{{ fila.codigoProducto ?? '—' }}</td>
 
-            <td>
-              <span class="inventario__precio">{{ formatearMoneda(fila.precio) }}</span>
-              <span class="inventario__unidad"> / {{ fila.unidadMedida }}</span>
-            </td>
+              <td>
+                <span class="inventario__precio">{{ formatearMoneda(fila.precio) }}</span>
+                <span class="inventario__unidad"> / {{ fila.unidadMedida }}</span>
+              </td>
 
-            <td v-if="!esCliente" class="tabla__celda--centro">
-              {{ fila.cantidadKg > 0 ? fila.master : '—' }}
-            </td>
+              <td v-if="!esCliente" class="tabla__celda--centro">
+                {{ fila.cantidadKg > 0 ? fila.master : '—' }}
+              </td>
 
-            <td v-if="!esCliente" class="tabla__celda--centro">
-              {{ formatearKg(fila.cantidadKg) }}
-            </td>
+              <td v-if="!esCliente" class="tabla__celda--centro">
+                {{ formatearKg(fila.cantidadKg) }}
+              </td>
 
-            <td class="tabla__celda--centro">
-              <ChipEstadoVue
-                :estado="esCliente || fila.cantidadKg > 0 ? 'entregado' : 'cancelado'"
-                :etiqueta="esCliente || fila.cantidadKg > 0 ? 'Disponible' : 'Agotado'"
-              />
-            </td>
-          </tr>
-        </TablaVue>
+              <td class="tabla__celda--centro">
+                <ChipEstadoVue
+                  :estado="esCliente || fila.cantidadKg > 0 ? 'entregado' : 'cancelado'"
+                  :etiqueta="esCliente || fila.cantidadKg > 0 ? 'Disponible' : 'Agotado'"
+                />
+              </td>
+            </tr>
+          </TablaVue>
+        </div>
       </section>
     </div>
   </LayoutPanelVue>
@@ -278,7 +314,12 @@ onMounted(cargarInventario)
 .inventario {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
+}
+
+.inventario__seccion {
+  display: flex;
+  flex-direction: column;
 }
 
 .migas__lista {
@@ -312,8 +353,7 @@ onMounted(cargarInventario)
 
 .inventario__cabecera {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
@@ -322,10 +362,12 @@ onMounted(cargarInventario)
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .btn-regresar {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 36px;
@@ -345,14 +387,18 @@ onMounted(cargarInventario)
 .inventario__titulo {
   margin: 0;
   color: var(--gf-texto);
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
 }
 
 .inventario__subtitulo {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--gf-texto-tenue);
-  font-size: 14px;
+  font-size: 13px;
+}
+
+.inventario__accion {
+  flex: none;
 }
 
 .inventario__alerta {
@@ -462,5 +508,33 @@ onMounted(cargarInventario)
 
 .fila-agotada {
   opacity: 0.78;
+}
+
+@media (max-width: 900px) {
+  .inventario__titulo {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .inventario__cabecera {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .inventario__accion {
+    width: 100%;
+  }
+
+  .inventario__controles {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .inventario__buscador {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
 }
 </style>

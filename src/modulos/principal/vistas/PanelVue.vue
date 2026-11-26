@@ -217,18 +217,8 @@ const inventarioFiltrado = computed(() => {
       </div>
 
       <!-- Sección de Inventario -->
-      <!-- Sección de Inventario -->
       <section class="panel__seccion">
-        <EncabezadoSeccionVue :titulo="esCliente ? 'Catálogo de Productos' : 'Inventario'" icono="caja">
-          <BotonVue
-            v-if="!esCliente"
-            variante="secundario"
-            compacto
-            @click="enrutador.push({ name: 'inventario' })"
-          >
-            Ver todo el inventario
-          </BotonVue>
-        </EncabezadoSeccionVue>
+        <EncabezadoSeccionVue :titulo="esCliente ? 'Catálogo de Productos' : 'Inventario'" icono="caja" />
 
         <div v-if="errorInventario" class="panel__alerta-inventario" role="alert">
           <div class="panel__alerta-texto">
@@ -238,17 +228,27 @@ const inventarioFiltrado = computed(() => {
           <BotonVue variante="secundario" compacto @click="cargarInventario">Reintentar</BotonVue>
         </div>
 
-        <div class="panel__buscador-inventario">
-          <CampoTextoVue
-            id="panel-buscar-inventario"
-            v-model="busquedaInventario"
-            etiqueta="Buscar producto"
-            marcador="Talla, nombre o código"
-            icono="lupa"
-            compacto
-            autocomplete="off"
-            :deshabilitado="cargandoInventario || !!errorInventario"
-          />
+        <div class="panel__barra-inventario">
+          <div class="panel__buscador-inventario">
+            <CampoTextoVue
+              id="panel-buscar-inventario"
+              v-model="busquedaInventario"
+              etiqueta="Buscar producto"
+              marcador="Talla, nombre o código"
+              icono="lupa"
+              compacto
+              autocomplete="off"
+              :deshabilitado="cargandoInventario || !!errorInventario"
+            />
+          </div>
+
+          <RouterLink
+            v-if="!esCliente"
+            :to="{ name: 'inventario' }"
+            class="panel__ver-todo"
+          >
+            Ver todo el inventario
+          </RouterLink>
         </div>
 
         <TablaVue :columnas="columnasInventario" :alto-maximo="altoInventario">
@@ -377,6 +377,41 @@ const inventarioFiltrado = computed(() => {
   gap: 8px;
 }
 
+.panel__barra-inventario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.panel__buscador-inventario {
+  flex: 1;
+  min-width: 220px;
+  max-width: 360px;
+}
+
+.panel__ver-todo {
+  padding-bottom: 2px;
+  color: var(--gf-secundario);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.panel__ver-todo:hover {
+  text-decoration: underline;
+}
+
+.panel__ver-todo:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--gf-secundario);
+  outline-offset: 2px;
+}
+
 .panel__buscador-inventario {
   max-width: 360px;
   margin-bottom: 10px;
@@ -487,5 +522,19 @@ const inventarioFiltrado = computed(() => {
     flex-direction: column;
     align-items: stretch;
   }
+  .panel__barra-inventario {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .panel__buscador-inventario {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .panel__ver-todo {
+    align-self: flex-end;
+  }
 }
+
 </style>
