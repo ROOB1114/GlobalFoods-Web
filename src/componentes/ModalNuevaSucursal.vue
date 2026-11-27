@@ -1,116 +1,369 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import logo from '@/recursos/logo-transparente.png'
+import { reactive, ref, watch } from 'vue'
 import BotonVue from '@/componentes/BotonVue.vue'
 import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
+import type { SucursalAPI } from '@/modulos/administracion/servicios/servicioClientes'
+import logo from '@/recursos/logo-transparente.png'
+
+export interface DatosFormularioSucursal {
+  nombreSucursal: string
+  direccion: string
+  telefono: string
+  referencias: string
+}
 
 interface Props {
   mostrar: boolean
-  sucursalEditar?: any | null 
+  sucursalEditar?: SucursalAPI | null
+  errorNombreApi?: string
+  enviando?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   mostrar: false,
-  sucursalEditar: null
+  sucursalEditar: null,
+  errorNombreApi: '',
+  enviando: false,
 })
 
 const emit = defineEmits<{
   (e: 'cerrar'): void
-  (e: 'guardar', datos: { nombreSucursal: string; direccion: string; telefono: string }): void
+  (e: 'limpiar-error-nombre'): void
+  (e: 'guardar', datos: DatosFormularioSucursal): void
 }>()
 
 const nombreSucursal = ref('')
 const direccion = ref('')
 const telefono = ref('')
-const confirmacionDatos = ref(false)
-// La dirección es obligatoria: en los pedidos a domicilio es la dirección de entrega (ya no se
-// puede escribir otra al crear el pedido) y la que se busca con "Ver en Maps".
-const errorDireccion = ref('')
-const MENSAJE_DIRECCION = 'Capture la dirección completa: calle, número, colonia y ciudad.'
+const referencias = ref('')
 
-// Se limpia al corregir la dirección y al volver a abrir el modal.
-watch([direccion, () => props.mostrar], () => {
-  errorDireccion.value = ''
+const errores = reactive({
+  nombreSucursal: '',
+  direccion: '',
+  telefono: '',
+  referencias: '',
 })
 
-watch(() => props.sucursalEditar, (nuevaSucursal) => {
-  if (nuevaSucursal) {
-    nombreSucursal.value = nuevaSucursal.NombreSucursal || ''
-    direccion.value = nuevaSucursal.Direccion || ''
-    telefono.value = nuevaSucursal.Telefono || ''
-    confirmacionDatos.value = false 
-    errorDireccion.value = ''
-  } else {
-    nombreSucursal.value = ''
-    direccion.value = ''
-    telefono.value = ''
-    confirmacionDatos.value = false
-    errorDireccion.value = ''
+function limpiarErrores() {
+  errores.nombreSucursal = ''
+  errores.direccion = ''
+  errores.telefono = ''
+  errores.referencias = ''
+}
+
+function validar(): boolean {
+  limpiarErrores()
+  const nombreLimpio = nombreSucursal.value.trim()
+  const direccionLimpia = direccion.value.trim()
+  const telefonoLimpio = telefono.value.trim()
+  const referenciasLimpias = referencias.value.trim()
+
+  let valido = true
+
+  if (!nombreLimpio) {
+    errores.nombreSucursal = 'Este dato es obligatorio.'
+    valido = false
+  } else if (nombreLimpio.length > 100) {
+    errores.nombreSucursal = 'El nombre de la sucursal debe tener máximo 100 caracteres.'
+    valido = false
   }
-}, { immediate: true })
+
+  if (!direccionLimpia) {
+    errores.direccion = 'Este dato es obligatorio.'
+    valido = false
+  } else if (direccionLimpia.length > 255) {
+    errores.direccion = 'La dirección debe tener máximo 255 caracteres.'
+    valido = false
+  }
+
+  if (!telefonoLimpio) {
+    errores.telefono = 'Este dato es obligatorio.'
+    valido = false
+  } else if (!/^\d{10}$/.test(telefonoLimpio)) {
+    errores.telefono = 'Capture un teléfono de 10 dígitos.'
+    valido = false
+  }
+
+  if (referenciasLimpias.length > 250) {
+    errores.referencias = 'Las referencias deben tener máximo 250 caracteres.'
+    valido = false
+  }
+
+  return valido
+}
 
 const handleGuardar = () => {
-  if (!direccion.value.trim()) {
-    errorDireccion.value = MENSAJE_DIRECCION
-    document.getElementById('sucursal-direccion')?.focus()
-    return
-  }
+  if (props.enviando) return
+  if (!validar()) return
+
   emit('guardar', {
-    nombreSucursal: nombreSucursal.value,
+    nombreSucursal: nombreSucursal.value.trim(),
     direccion: direccion.value.trim(),
-    telefono: telefono.value,
+    telefono: telefono.value.trim(),
+    referencias: referencias.value.trim(),
   })
-  emit('cerrar')
 }
+
+watch(nombreSucursal, () => {
+  if (errores.nombreSucursal) errores.nombreSucursal = ''
+  if (props.errorNombreApi) emit('limpiar-error-nombre')
+})
+
+watch(direccion, () => {
+  if (errores.direccion) errores.direccion = ''
+})
+
+watch(telefono, () => {
+  if (errores.telefono) errores.telefono = ''
+})
+
+watch(referencias, () => {
+  if (errores.referencias) errores.referencias = ''
+})
+
+watch(
+  [() => props.sucursalEditar, () => props.mostrar],
+  ([nuevaSucursal, estaVisible]) => {
+    if (!estaVisible) return
+    limpiarErrores()
+    if (nuevaSucursal) {
+      nombreSucursal.value = nuevaSucursal.NombreSucursal || ''
+      direccion.value = nuevaSucursal.Direccion || ''
+      telefono.value = nuevaSucursal.Telefono || ''
+      referencias.value = nuevaSucursal.Referencias || ''
+    } else {
+      nombreSucursal.value = ''
+      direccion.value = ''
+      telefono.value = ''
+      referencias.value = ''
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="mostrar" class="overlay" @click.self="emit('cerrar')">
-      <div class="modal">
-        <div class="modal__logo-wrap">
+    <div v-if="mostrar" class="overlay" @click.self="!enviando && emit('cerrar')">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-sucursal-titulo">
+        <div class="modal__encabezado">
           <img :src="logo" alt="Global Foods México" class="modal__logo" />
+          <div>
+            <h2 id="modal-sucursal-titulo" class="modal__titulo">
+              {{ sucursalEditar ? 'Modificar sucursal' : 'Nueva sucursal' }}
+            </h2>
+            <p class="modal__subtitulo">
+              {{
+                sucursalEditar
+                  ? 'Los pedidos ya registrados conservarán la dirección con la que fueron capturados.'
+                  : 'Registra un lugar de entrega para recibir pedidos a domicilio.'
+              }}
+            </p>
+          </div>
         </div>
-        <div class="modal__caja">
-          <form @submit.prevent="handleGuardar" class="modal__form">
-            <CampoTextoVue id="sucursal-nombre" v-model="nombreSucursal" etiqueta="Nombre de Sucursal" marcador="Ej. Las Quintas" />
+
+        <form class="modal__form" novalidate @submit.prevent="handleGuardar">
+          <div class="modal__campo">
+            <CampoTextoVue
+              id="sucursal-nombre"
+              v-model="nombreSucursal"
+              etiqueta="Nombre de la sucursal *"
+              marcador="Ej. Sucursal Centro"
+              autocomplete="off"
+              :deshabilitado="enviando"
+            />
+            <p v-if="errores.nombreSucursal || errorNombreApi" class="modal__error" role="alert">
+              {{ errores.nombreSucursal || errorNombreApi }}
+            </p>
+          </div>
+
+          <div class="modal__campo">
             <CampoTextoVue
               id="sucursal-direccion"
               v-model="direccion"
-              etiqueta="Dirección"
-              marcador="Calle, número, colonia y ciudad"
-              obligatorio
-              :error="errorDireccion"
+              etiqueta="Dirección (calle y número, colonia y ciudad) *"
+              marcador="Ej. Calle Río Humaya #123, Col. Las Quintas, Culiacán, Sin."
+              autocomplete="off"
+              :deshabilitado="enviando"
             />
-            <CampoTextoVue id="sucursal-telefono" v-model="telefono" etiqueta="Teléfono" tipo="tel" marcador="Teléfono" />
+            <p v-if="errores.direccion" class="modal__error" role="alert">{{ errores.direccion }}</p>
+          </div>
 
-            <label class="modal__confirmacion">
-              <input type="checkbox" v-model="confirmacionDatos" class="modal__confirmacion-input" />
-              <span class="modal__confirmacion-texto">Confirmo que los datos ingresados son correctos</span>
-            </label>
+          <div class="modal__campo">
+            <CampoTextoVue
+              id="sucursal-telefono"
+              v-model="telefono"
+              etiqueta="Teléfono (10 dígitos) *"
+              tipo="tel"
+              marcador="6671234567"
+              autocomplete="off"
+              :deshabilitado="enviando"
+            />
+            <p v-if="errores.telefono" class="modal__error" role="alert">{{ errores.telefono }}</p>
+          </div>
 
-            <div class="modal__boton-wrap">
-              <BotonVue tipo="submit" variante="primario" :deshabilitado="!confirmacionDatos">
-                {{ sucursalEditar ? 'Guardar Cambios' : 'Registrar Sucursal' }}
-              </BotonVue>
+          <div class="modal__campo">
+            <div class="modal__etiqueta-fila">
+              <label for="sucursal-referencias" class="modal__etiqueta">Referencias (opcional)</label>
+              <span class="modal__contador">{{ referencias.length }}/250</span>
             </div>
-          </form>
-        </div>
+            <textarea
+              id="sucursal-referencias"
+              v-model="referencias"
+              rows="2"
+              maxlength="250"
+              class="modal__textarea"
+              placeholder="Entre calles, color de fachada, puerta de servicio..."
+              :disabled="enviando"
+            ></textarea>
+            <p v-if="errores.referencias" class="modal__error" role="alert">{{ errores.referencias }}</p>
+          </div>
+
+          <div class="modal__acciones">
+            <BotonVue variante="secundario" :deshabilitado="enviando" @click="emit('cerrar')">
+              Cancelar
+            </BotonVue>
+            <BotonVue tipo="submit" variante="exito" :deshabilitado="enviando">
+              {{
+                enviando
+                  ? 'Guardando…'
+                  : sucursalEditar
+                    ? 'Guardar cambios'
+                    : 'Guardar sucursal'
+              }}
+            </BotonVue>
+          </div>
+        </form>
       </div>
     </div>
   </Teleport>
 </template>
 
 <style scoped>
-.overlay { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(2px); padding: 16px; }
-.modal { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 440px; padding: 32px 24px; border-radius: 16px; background: var(--gf-superficie); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); }
-.modal__logo-wrap { display: flex; justify-content: center; margin-bottom: 24px; }
-.modal__logo { height: 48px; object-fit: contain; }
-.modal__caja { width: 100%; padding: 24px; border: 1px solid var(--gf-borde); border-radius: 12px; background: var(--gf-superficie); }
-.modal__form { display: flex; flex-direction: column; gap: 16px; }
-.modal__confirmacion { display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 12px 14px; background-color: var(--gf-fondo); border: 1px solid var(--gf-borde); border-radius: 8px; cursor: pointer; transition: border-color 0.2s ease, background-color 0.2s ease; }
-.modal__confirmacion:hover { border-color: var(--gf-primario); background-color: color-mix(in srgb, var(--gf-fondo) 80%, var(--gf-primario)); }
-.modal__confirmacion-input { width: 18px; height: 18px; accent-color: var(--gf-primario); cursor: pointer; }
-.modal__confirmacion-texto { font-size: 13.5px; color: var(--gf-texto); font-weight: 500; user-select: none; }
-.modal__boton-wrap { margin-top: 8px; }
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  padding: 16px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 24px 28px;
+  border-radius: 16px;
+  background: var(--gf-superficie);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+.modal__encabezado {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.modal__logo {
+  flex: none;
+  height: 40px;
+  object-fit: contain;
+}
+
+.modal__titulo {
+  margin: 0;
+  color: var(--gf-texto);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.modal__subtitulo {
+  margin: 4px 0 0;
+  color: var(--gf-texto-tenue);
+  font-size: 13px;
+}
+
+.modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal__campo {
+  display: flex;
+  flex-direction: column;
+}
+
+.modal__etiqueta-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.modal__etiqueta {
+  color: var(--gf-texto);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modal__contador {
+  color: var(--gf-texto-tenue);
+  font-size: 12px;
+}
+
+.modal__textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--gf-borde);
+  border-radius: 8px;
+  background: var(--gf-superficie);
+  color: var(--gf-texto);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.modal__textarea:focus {
+  border-color: var(--gf-secundario);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gf-secundario) 20%, transparent);
+}
+
+.modal__error {
+  margin: 5px 0 0;
+  color: var(--gf-cancelado-punto);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.modal__acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.modal__acciones > :deep(*) {
+  width: auto;
+}
+
+@media (max-width: 560px) {
+  .modal {
+    padding: 20px;
+  }
+
+  .modal__acciones {
+    flex-direction: column-reverse;
+  }
+
+  .modal__acciones > :deep(*) {
+    width: 100%;
+  }
+}
 </style>
