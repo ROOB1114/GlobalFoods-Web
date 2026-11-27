@@ -5,6 +5,7 @@
 // La lista se actualiza sola cada minuto para reflejar lo que cambia el sistema interno
 // (Surtido, cobro y Entregado).
 
+import { perfilPuedeRegistrarPedido } from '@/modulos/ventas/controladores/permisosPedidos'
 import { computed, nextTick, onMounted, reactive } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
@@ -79,6 +80,9 @@ async function alCambiarPagina(paso: 1 | -1) {
     document.getElementById(paso === 1 ? IDS_LISTA.anterior : IDS_LISTA.siguiente)?.focus()
   }
 }
+
+// CU-05: "Nuevo pedido" solo para los perfiles que registran pedidos (Tabla 2).
+const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
 </script>
 
 <template>
@@ -98,7 +102,7 @@ async function alCambiarPagina(paso: 1 | -1) {
           </p>
         </div>
 
-        <div class="pedidos__accion">
+        <div v-if="puedeRegistrarPedido" class="pedidos__accion">
           <BotonVue variante="exito" @click="enrutador.push({ name: 'nuevo-pedido', query: { desde: 'pedidos' } })">
             <IconoVue nombre="mas" :tamano="16" />
             Nuevo pedido
