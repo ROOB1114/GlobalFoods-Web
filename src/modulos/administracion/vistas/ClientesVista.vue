@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import AvisoVue from '@/componentes/AvisoVue.vue'
 import BotonVue from '@/componentes/BotonVue.vue'
 import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
@@ -7,7 +8,7 @@ import EncabezadoSeccionVue from '@/componentes/EncabezadoSeccionVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import LayoutPanelVue from '@/componentes/LayoutPanelVue.vue'
 import ModalConfirmacion from '@/componentes/ModalConfirmacion.vue'
-import ModalNuevoCliente from '@/componentes/ModalNuevoCliente.vue'
+import ModalNuevoCliente, { type DatosFormularioCliente } from '@/componentes/ModalNuevoCliente.vue'
 import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
 import {
   obtenerMenuNavegacion,
@@ -15,12 +16,16 @@ import {
   obtenerRolUsuario,
 } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import {
+  ErrorClientes,
   actualizarClienteAPI,
   cambiarEstatusClienteAPI,
   crearClienteAPI,
+  eliminarClienteAPI,
   obtenerClientesAPI,
   type ClienteAPI,
 } from '@/modulos/administracion/servicios/servicioClientes'
+import { ESTATUS } from '@/modulos/ventas/controladores/estadosPedido'
+import { obtenerPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
 
 const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
 const itemsNavegacion = obtenerMenuNavegacion()
@@ -40,12 +45,21 @@ const textoBusqueda = ref('')
 const criterioActivo = ref('')
 const errorBusqueda = ref('')
 
-// Estados de modales
+// Estados de modales (CU-16, CU-17 y cambio de estatus)
 const mostrarModal = ref(false)
 const clienteSeleccionado = ref<ClienteAPI | null>(null)
+const mostrarConfirmacionGuardado = ref(false)
+const datosPendientesGuardado = ref<DatosFormularioCliente | null>(null)
+const errorUsuarioApi = ref('')
+const guardandoCliente = ref(false)
+
 const mostrarModalConfirmacion = ref(false)
 const clienteACambiar = ref<ClienteAPI | null>(null)
 const desactivando = computed(() => clienteACambiar.value?.Estatus === 1)
+
+// Estado para avisos emergentes
+const mensajeAviso = ref('')
+const varianteAviso = ref<'error' | 'exito'>('exito')
 
 // Estado para controlar qué contraseñas están visibles (guardamos el Id)
 const contrasenasVisibles = ref<number[]>([])
@@ -70,6 +84,13 @@ const columnasClientes = computed<ColumnaTabla[]>(() =>
         { clave: 'estado', etiqueta: 'ESTADO' },
       ],
 )
+
+async function avisar(texto: string, variante: 'error' | 'exito') {
+  mensajeAviso.value = ''
+  await nextTick()
+  varianteAviso.value = variante
+  mensajeAviso.value = texto
+}
 
 function normalizarTexto(valor: string): string {
   return valor
@@ -175,67 +196,157 @@ const cargarDatosClientes = async () => {
   }
 }
 
-onMounted(() => {
-  cargarDatosClientes()
-})
-
 const abrirModalCrear = () => {
   clienteSeleccionado.value = null
+  errorUsuarioApi.value = ''
+  datosPendientesGuardado.value = null
   mostrarModal.value = true
 }
 
 const abrirModalEditar = (cli: ClienteAPI) => {
   clienteSeleccionado.value = cli
+  errorUsuarioApi.value = ''
+  datosPendientesGuardado.value = null
   mostrarModal.value = true
 }
 
-const solicitarCambioEstatus = (cli: ClienteAPI) => {
+// CU-16 paso 6 y CU-17 (RF-CLI-03): pedir confirmación antes de crear o guardar cambios
+const guardarCliente = (datos: DatosFormularioCliente) => {
+  errorUsuarioApi.value = ''
+  datosPendientesGuardado.value = datos
+  mostrarConfirmacionGuardado.value = true
+}
+
+// Cancelar confirmación conserva el estado anterior sin guardar cambios
+const cancelarConfirmacionGuardado = () => {
+  if (guardandoCliente.value) return
+  mostrarConfirmacionGuardado.value = false
+  datosPendientesGuardado.value = null
+  errorUsuarioApi.value = ''
+  mostrarModal.value = false
+}
+
+const confirmarGuardadoCliente = async () => {
+  const datos = datosPendientesGuardado.value
+  if (!datos || guardandoCliente.value) return
+
+  const esEdicion = Boolean(clienteSeleccionado.value)
+  guardandoCliente.value = true
+  errorUsuarioApi.value = ''
+
+  try {
+    if (clienteSeleccionado.value) {
+      await actualizarClienteAPI(clienteSeleccionado.value.Id, {
+        usuario: datos.usuario,
+        contrasena: datos.contrasena || null,
+        nombre: datos.nombre,
+        telefono: datos.celular,
+        usuarioTelegram: datos.usuarioTelegram || null,
+        estatus: datos.estatus,
+      } as any)
+    } else {
+      await crearClienteAPI({
+        usuario: datos.usuario,
+        contrasena: datos.contrasena,
+        nombre: datos.nombre,
+        telefono: datos.celular,
+        usuarioTelegram: datos.usuarioTelegram || null,
+        estatus: 1,
+      } as any)
+    }
+
+    mostrarConfirmacionGuardado.value = false
+    mostrarModal.value = false
+    datosPendientesGuardado.value = null
+    await cargarDatosClientes()
+
+    await avisar(
+      esEdicion
+        ? 'Cliente actualizado correctamente.'
+        : `Cliente ${datos.nombre} registrado correctamente.`,
+      'exito',
+    )
+  } catch (err: unknown) {
+    mostrarConfirmacionGuardado.value = false
+    if (err instanceof ErrorClientes && err.codigo === 'USUARIO_DUPLICADO') {
+      errorUsuarioApi.value = err.message
+      return
+    }
+    const mensajeDefecto = esEdicion
+      ? 'No fue posible guardar los cambios. Intente nuevamente.'
+      : 'No fue posible registrar al cliente. Intente nuevamente.'
+    const mensaje = err instanceof ErrorClientes ? err.message : mensajeDefecto
+    await avisar(mensaje, 'error')
+  } finally {
+    guardandoCliente.value = false
+  }
+}
+
+const procesandoEstatus = ref(false)
+const ESTATUS_EN_PROCESO: number[] = [ESTATUS.creado, ESTATUS.surtido, ESTATUS.enReparto]
+
+const solicitarCambioEstatus = async (cli: ClienteAPI) => {
+  if (procesandoEstatus.value) return
+
+  // CU-18 paso 4 y A1: antes de pedir confirmación, verificar que no tenga pedidos en proceso.
+  if (cli.Estatus === 1) {
+    procesandoEstatus.value = true
+    try {
+      const pedidosCliente = await obtenerPedidos(cli.Id)
+      const tieneEnProceso = pedidosCliente.some((p) => ESTATUS_EN_PROCESO.includes(p.estatus))
+      if (tieneEnProceso) {
+        await avisar(
+          'El cliente tiene pedidos en proceso. Puede darse de baja cuando se entreguen o se cancelen.',
+          'error',
+        )
+        return
+      }
+    } catch {
+      await avisar('No fue posible dar de baja al cliente. Intente nuevamente.', 'error')
+      return
+    } finally {
+      procesandoEstatus.value = false
+    }
+  }
+
   clienteACambiar.value = cli
   mostrarModalConfirmacion.value = true
 }
 
-const guardarCliente = async (datos: {
-  nombre: string
-  celular: string
-  usuario: string
-  usuarioTelegram: string
-  contrasena: string
-}) => {
-  try {
-    const payload = {
-      usuario: datos.usuario,
-      contrasena: datos.contrasena,
-      nombre: datos.nombre,
-      telefono: datos.celular,
-      usuarioTelegram: datos.usuarioTelegram || null,
-      estatus: clienteSeleccionado.value?.Estatus ?? 1,
-    }
-
-    if (clienteSeleccionado.value) {
-      await actualizarClienteAPI(clienteSeleccionado.value.Id, payload as any)
-    } else {
-      await crearClienteAPI(payload as any)
-    }
-
-    mostrarModal.value = false
-    await cargarDatosClientes()
-  } catch (err: any) {
-    alert(err.message || 'Error al guardar el cliente')
-  }
-}
-
 const confirmarCambioEstatus = async () => {
-  if (!clienteACambiar.value) return
+  if (!clienteACambiar.value || procesandoEstatus.value) return
 
+  const esBaja = desactivando.value
+  procesandoEstatus.value = true
   try {
-    await cambiarEstatusClienteAPI(clienteACambiar.value, desactivando.value ? 0 : 1)
+    if (esBaja) {
+      await eliminarClienteAPI(clienteACambiar.value.Id)
+    } else {
+      await cambiarEstatusClienteAPI(clienteACambiar.value, 1)
+    }
+
     mostrarModalConfirmacion.value = false
     clienteACambiar.value = null
     await cargarDatosClientes()
-  } catch (err: any) {
-    alert(err.message || 'No fue posible cambiar el estado del cliente. Intente nuevamente.')
+    await avisar(
+      esBaja ? 'Cliente dado de baja correctamente.' : 'Cliente actualizado correctamente.',
+      'exito',
+    )
+  } catch (err: unknown) {
+    mostrarModalConfirmacion.value = false
+    const mensajeDefecto = esBaja
+      ? 'No fue posible dar de baja al cliente. Intente nuevamente.'
+      : 'No fue posible guardar los cambios. Intente nuevamente.'
+    const mensaje = err instanceof ErrorClientes ? err.message : mensajeDefecto
+    await avisar(mensaje, 'error')
+  } finally {
+    procesandoEstatus.value = false
   }
 }
+
+onMounted(() => {
+  cargarDatosClientes()
+})
 </script>
 
 <template>
@@ -406,25 +517,46 @@ const confirmarCambioEstatus = async () => {
     v-if="esAdministrador"
     :mostrar="mostrarModal"
     :cliente-editar="clienteSeleccionado"
+    :error-usuario-api="errorUsuarioApi"
+    :enviando="guardandoCliente"
     @cerrar="mostrarModal = false"
+    @limpiar-error-usuario="errorUsuarioApi = ''"
     @guardar="guardarCliente"
   />
 
   <ModalConfirmacion
     v-if="esAdministrador"
+    :mostrar="mostrarConfirmacionGuardado"
+    :titulo="clienteSeleccionado ? 'Confirmar cambios' : 'Confirmar registro'"
+    :mensaje="
+      clienteSeleccionado
+        ? `¿Confirma los cambios del cliente ${datosPendientesGuardado?.nombre ?? ''}?`
+        : `¿Confirma el registro del cliente ${datosPendientesGuardado?.nombre ?? ''}?`
+    "
+    :texto-boton-confirmar="clienteSeleccionado ? 'Guardar cambios' : 'Registrar'"
+    icono="check"
+    variante-confirmar="primario"
+    @cerrar="cancelarConfirmacionGuardado"
+    @confirmar="confirmarGuardadoCliente"
+  />
+
+  <ModalConfirmacion
+    v-if="esAdministrador"
     :mostrar="mostrarModalConfirmacion"
-    :titulo="desactivando ? '¿Desactivar cliente?' : '¿Reactivar cliente?'"
+    :titulo="desactivando ? 'Confirmar baja del cliente' : '¿Reactivar cliente?'"
     :mensaje="
       desactivando
-        ? `'${clienteACambiar?.Nombre}' ya no aparecerá al registrar pedidos. Sus pedidos y sucursales se conservan, y puedes reactivarlo cuando quieras.`
-        : `'${clienteACambiar?.Nombre}' volverá a aparecer al registrar pedidos.`
+        ? `¿Confirma la baja del cliente ${clienteACambiar?.Nombre ?? ''}? Ya no puede iniciar sesión.`
+        : `'${clienteACambiar?.Nombre ?? ''}' volverá a estar activo y podrá iniciar sesión.`
     "
-    :texto-boton-confirmar="desactivando ? 'Desactivar' : 'Reactivar'"
+    :texto-boton-confirmar="desactivando ? 'Dar de baja' : 'Reactivar'"
     :icono="desactivando ? 'candado' : 'check'"
     :variante-confirmar="desactivando ? 'peligro' : 'primario'"
     @cerrar="mostrarModalConfirmacion = false"
     @confirmar="confirmarCambioEstatus"
   />
+
+  <AvisoVue v-model="mensajeAviso" :variante="varianteAviso" />
 </template>
 
 <style scoped>

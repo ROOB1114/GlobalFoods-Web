@@ -102,6 +102,8 @@ export interface Pedido {
   observaciones: string
   lineas: LineaPedido[]
   eventos: EventoPedido[]
+  /** Nombre resuelto por la API (p. ej. en GET /api/pedidos/mios) para conservar el historial de sucursales inactivas. */
+  nombreSucursal?: string | null
 }
 
 /** Producto dentro de un pedido registrado. */
