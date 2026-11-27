@@ -37,8 +37,9 @@ export const MAXIMO_OBSERVACIONES = 250
 
 export const MENSAJES = {
   clienteRequerido: 'Seleccione un cliente.',
-  sucursalRequerida: 'Seleccione una sucursal.',
-  sinSucursales: 'Este cliente no tiene sucursales registradas.',
+  // RF-PED-01.
+  sucursalRequerida: 'Seleccione la sucursal de entrega.',
+  sinSucursales: 'No tiene sucursales registradas. Agregue una o elija recolección en congeladora.',
   productosRequeridos: 'Agregue al menos un producto al pedido.',
   cantidadInvalida: 'La cantidad debe ser mayor que cero.',
   modalidadRequerida: 'Seleccione la modalidad de entrega.',

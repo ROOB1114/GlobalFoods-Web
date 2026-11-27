@@ -4,17 +4,23 @@ import {
   estadoDePedido,
   sePuedeCancelar,
   sePuedeEditar,
+  sePuedeIniciarReparto,
   sePuedeRegistrarPago,
+  sePuedeRegistrarResultadoEntrega,
 } from '@/modulos/ventas/controladores/estadosPedido'
 import { fechaHoyIso } from '@/modulos/ventas/controladores/formatosPedido'
 import { METODO_PAGO } from '@/modulos/ventas/controladores/metodosPago'
-import { armarObservaciones, reemplazarNotas } from '@/modulos/ventas/controladores/observacionesPedido'
+import {
+  armarObservaciones,
+  leerObservaciones,
+  reemplazarNotas,
+} from '@/modulos/ventas/controladores/observacionesPedido'
 import {
   MENSAJE_MIXTO_PENDIENTE,
   metodoPagoDelPedido,
   type PagoEntrega,
 } from '@/modulos/ventas/controladores/pagoEntrega'
-import { esSucursalRecoleccion } from '@/modulos/ventas/controladores/puntoRecoleccion'
+import { esSucursalRecoleccion, modalidadDePedido } from '@/modulos/ventas/controladores/puntoRecoleccion'
 
 import type {
   DatosRegistroPedido,
@@ -122,7 +128,17 @@ interface CambiosPedidoAPI
   > {
   /** Nueva fecha de entrega (aaaammdd); va con el nombre con que la regresó el GET. */
   entrega?: number
+  /** Motivo de la cancelación o de la entrega no realizada; va en CAMPO_MOTIVO_API. */
+  motivo?: string
 }
+
+/**
+ * Campo del PUT /api/pedidos/:id con el motivo de una cancelación o de una entrega no realizada.
+ * La API lo guarda en la bitácora del pedido (PedidosEventosAppVentas, columna Motivo), de donde
+ * lo leen el historial del detalle y Reportes.
+ * TODO: confirmar con César el nombre del campo; si es otro, se cambia solo aquí.
+ */
+const CAMPO_MOTIVO_API = 'Motivo'
 
 export type MotivoErrorPedidos =
   | 'sesion'
@@ -274,8 +290,9 @@ function nombreCampoFechaEntrega(pedido: PedidoConsultadoAPI): CampoFechaEntrega
 }
 
 function cuerpoActualizacion(actual: PedidoConsultadoAPI, cambios: CambiosPedidoAPI): PedidoActualizadoAPI {
-  const { entrega, ...campos } = cambios
+  const { entrega, motivo, ...campos } = cambios
   return {
+    ...(motivo === undefined ? {} : { [CAMPO_MOTIVO_API]: motivo }),
     IdCliente: actual.IdCliente,
     IdSucursal: idSucursalParaApi(aNumero(actual.IdSucursal)),
     Fecha: actual.Fecha,
@@ -367,7 +384,22 @@ export async function registrarPedido(datos: DatosRegistroPedido): Promise<Respu
   return { folio: `#${creado.Id}` }
 }
 
-export async function cancelarPedido(id: number): Promise<void> {
+/** Modalidad de un pedido tal como llegó de la API: IdSucursal 0 o null es recolección; si no, la de Observaciones. */
+function modalidadDeConsultado(pedido: PedidoConsultadoAPI) {
+  return modalidadDePedido(aNumero(pedido.IdSucursal), leerObservaciones(pedido.Observaciones ?? null).modalidad)
+}
+
+/**
+ * Cancela un pedido Creado o Surtido (CU-07): lo vuelve a mandar tal como está, con Estatus 5 y el
+ * motivo (va a la bitácora del pedido). Primero lo consulta, para reenviar sus datos actuales sin
+ * tocarlos y para no cancelar uno que ya cambió de estado.
+ *
+ *   GET /api/pedidos/:id                → el pedido actual
+ *   PUT /api/pedidos/:id                → el mismo pedido con Estatus 5 y el motivo
+ *
+ * Si ya no se puede cancelar, lanza ErrorPedidos "datos_invalidos" con el mensaje para la vista.
+ */
+export async function cancelarPedido(id: number, motivo: string): Promise<void> {
   const actual = await consultarPedido(id)
 
   const estatus = aNumero(actual.Estatus)
@@ -377,7 +409,83 @@ export async function cancelarPedido(id: number): Promise<void> {
 
   await solicitar(rutaPedido(id), 'cancelar el pedido', {
     metodo: 'PUT',
-    cuerpo: cuerpoActualizacion(actual, { Estatus: ESTATUS.cancelado }),
+    cuerpo: cuerpoActualizacion(actual, { Estatus: ESTATUS.cancelado, motivo }),
+  })
+}
+
+/** Resultado de iniciar el reparto de varios pedidos. */
+export interface ResultadoInicioReparto {
+  /** Folios que quedaron En reparto. */
+  iniciados: number[]
+  /** Folios que no se pudieron pasar (p. ej. la API los rechazó a medio camino). */
+  fallidos: number[]
+}
+
+/**
+ * Inicia el reparto de uno o varios pedidos (CU-10 pasos 4–6): Surtido → En reparto (Estatus 3).
+ * Primero consulta todos; si alguno ya no está Surtido a domicilio (otro repartidor lo tomó o
+ * cambió de estado), no manda ninguno y lanza ErrorPedidos "datos_invalidos" con los folios (A2).
+ * Si todos siguen Surtidos, los manda uno por uno. Quién lo tomó queda en la bitácora del pedido.
+ *
+ *   GET /api/pedidos/:id   (cada uno)  → el pedido actual
+ *   PUT /api/pedidos/:id   (cada uno)  → el mismo pedido con Estatus 3
+ */
+export async function iniciarReparto(ids: number[]): Promise<ResultadoInicioReparto> {
+  const actuales = await Promise.all(ids.map((id) => consultarPedido(id)))
+
+  const tomados = actuales.filter(
+    (pedido) => !sePuedeIniciarReparto(aNumero(pedido.Estatus), modalidadDeConsultado(pedido)),
+  )
+  if (tomados.length > 0) {
+    const folios = tomados.map((pedido) => `#${aNumero(pedido.Id)}`)
+    throw rechazo(
+      folios.length === 1
+        ? `El pedido ${folios[0]} ya fue tomado por otro repartidor.`
+        : `Los pedidos ${folios.join(', ')} ya fueron tomados por otro repartidor.`,
+    )
+  }
+
+  const resultado: ResultadoInicioReparto = { iniciados: [], fallidos: [] }
+  for (const actual of actuales) {
+    const id = aNumero(actual.Id)
+    try {
+      await solicitar(rutaPedido(id), 'iniciar el reparto', {
+        metodo: 'PUT',
+        cuerpo: cuerpoActualizacion(actual, { Estatus: ESTATUS.enReparto }),
+      })
+      resultado.iniciados.push(id)
+    } catch (error) {
+      // Sin sesión o sin conexión no tiene caso seguir con los demás.
+      if (error instanceof ErrorPedidos && (error.motivo === 'sesion' || error.motivo === 'conexion')) {
+        if (resultado.iniciados.length === 0) throw error
+        resultado.fallidos.push(...actuales.slice(actuales.indexOf(actual)).map((pedido) => aNumero(pedido.Id)))
+        return resultado
+      }
+      resultado.fallidos.push(id)
+    }
+  }
+  return resultado
+}
+
+/**
+ * Registra una entrega no realizada (CU-10 A3): En reparto → Surtido, con el motivo. El pedido no
+ * se cancela ni tiene un estado propio: regresa a Surtido para otro intento de reparto o para que
+ * se cancele. El motivo queda en la bitácora y Reportes lo cuenta como entrega no realizada.
+ *
+ *   GET /api/pedidos/:id                → el pedido actual
+ *   PUT /api/pedidos/:id                → el mismo pedido con Estatus 2 y el motivo
+ */
+export async function registrarEntregaNoRealizada(id: number, motivo: string): Promise<void> {
+  const actual = await consultarPedido(id)
+
+  const estatus = aNumero(actual.Estatus)
+  if (!sePuedeRegistrarResultadoEntrega(estatus)) {
+    throw rechazo(`No se registró porque el pedido se encuentra ${estadoDePedido(estatus).etiqueta}.`)
+  }
+
+  await solicitar(rutaPedido(id), 'registrar la entrega no realizada', {
+    metodo: 'PUT',
+    cuerpo: cuerpoActualizacion(actual, { Estatus: ESTATUS.surtido, motivo }),
   })
 }
 
@@ -393,8 +501,12 @@ export async function registrarPago(
   const actual = await consultarPedido(id)
 
   const estatus = aNumero(actual.Estatus)
-  if (!sePuedeRegistrarPago(estatus)) {
-    throw rechazo(`El pago no se registró porque el pedido se encuentra ${estadoDePedido(estatus).etiqueta}.`)
+  if (!sePuedeRegistrarPago(estatus, modalidadDeConsultado(actual))) {
+    throw rechazo(
+      estatus === ESTATUS.surtido
+        ? 'El pago no se registró porque el pedido es a domicilio y todavía no sale a reparto.'
+        : `El pago no se registró porque el pedido se encuentra ${estadoDePedido(estatus).etiqueta}.`,
+    )
   }
 
   await solicitar(rutaPedido(id), 'registrar el pago', {
@@ -457,4 +569,4 @@ export async function obtenerPedidos(
 
 export async function obtenerPedidoPorId(id: number): Promise<Pedido> {
   return aPedido(await consultarPedido(id))
-}
+}

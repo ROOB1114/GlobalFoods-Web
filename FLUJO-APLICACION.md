@@ -43,7 +43,8 @@ La base actual del sistema tiene estas rutas principales:
 - `/pedidos` → lista de todos los pedidos (desde "Pedidos" en el menú lateral)
 - `/pedidos/nuevo` → captura y registro de un pedido (desde el botón "Nuevo Pedido" del panel o de la lista de pedidos)
 - `/pedidos/:id` → detalle de un pedido (desde su fila o su folio en la lista)
-- `/pedidos/:id/editar` → edición de un pedido Pendiente (desde "Editar pedido" en el detalle)
+- `/pedidos/:id/editar` → edición de un pedido Pendiente (desde "Editar pedido" en el detalle; solo perfiles con permiso)
+- `/reparto` → pantalla del repartidor (CU-10); es la única que ve ese perfil
 
 ## Lógica funcional por pantalla
 
@@ -122,12 +123,12 @@ flowchart TD
   - Un pedido con `IdSucursal` 0 es de recolección aunque `Observaciones` no lo diga: en lugar de la sucursal se ve "Recolección en congeladora".
   - La columna Método de pago muestra Pendiente, Efectivo o Crédito o transferencia, igual que el detalle ("—" si la API no lo trae).
 - **Detalle** (`DetallePedidoVista.vue`): barra de avance de los cuatro estados, cliente y entrega, y productos con su total. La fecha de entrega sale del mismo campo de la API que la lista. A domicilio, la dirección de entrega lleva su enlace "Ver en Maps"; en recolección se muestra el punto de recolección con su enlace "Ver en Maps"; si además es `IdSucursal` 0, la sucursal dice "Recolección en congeladora". Si el folio no existe, se avisa con un enlace de regreso a la lista.
-- Acciones del detalle (por ahora solo para el administrador): "Editar pedido" en Pendiente, "Registrar pago" en Surtido o En reparto y "Cancelar pedido" mientras no se haya entregado. Las tres consultan antes el pedido con `GET /api/pedidos/:id` y, si su estado todavía lo permite, lo vuelven a mandar completo con `PUT /api/pedidos/:id` (el método de pago y la fecha de entrega, si la API los regresa, se reenvían con el mismo nombre de campo, salvo lo que cambia la acción). Si el estado ya no lo permite, no se manda nada y se avisa por qué.
-- Cancelar pedido: Creado, Surtido o En reparto, igual que en la app móvil. Solo pide confirmación y avisa si almacén ya surtió o si ya salió a reparto. Manda el mismo pedido con Estatus 5. El pedido no se borra: queda Cancelado, con su propia píldora en los filtros y un aviso en el detalle en lugar de la barra de avance. Todavía no se pide el motivo (RF-PED-03), porque la API no tiene dónde guardarlo.
-- Registrar pago: en Surtido o En reparto, igual que "Registrar entrega" de la app móvil. La ventana muestra el total a cobrar y pide cuánto se recibió en Efectivo (empieza con el total); lo que falte se pasa solo a Tarjeta o transferencia. Debajo dice si cuadra ("Cuadra con el total · Pago: Efectivo") o cuánto falta o sobra; si no cuadra, no deja registrar. Con los dos montos es pago mixto: avisa que se podrá guardar cuando la API tenga la tabla `PagoPedidosApp` y no deja registrar. Se puede adjuntar el comprobante de entrega (foto del recibo firmado; elegir o arrastrar una imagen de hasta 5 MB), por ahora opcional y sin enviarse porque la API todavía no recibe fotos. También se pueden editar las observaciones (máximo 250), p. ej. para anotar una entrega parcial. Manda el mismo pedido con Estatus 4, `MetodoPago` 1 (efectivo) o 2 (tarjeta o transferencia), `FechaEntrega` de hoy (`aaaammdd`) y, solo si se cambiaron, las observaciones (conservando la modalidad al inicio). Al terminar: "Pago registrado. El pedido #id quedó Entregado." y se recarga el pedido. En la lista y el detalle el 2 se sigue viendo como "Crédito o transferencia", porque el sistema interno lo usa también para crédito.
+- Acciones del detalle (por ahora solo para el administrador): "Editar pedido" en Pendiente, "Registrar pago" en En reparto (o en Surtido si es de recolección) y "Cancelar pedido" en Creado o Surtido. Las tres consultan antes el pedido con `GET /api/pedidos/:id` y, si su estado todavía lo permite, lo vuelven a mandar completo con `PUT /api/pedidos/:id` (el método de pago y la fecha de entrega, si la API los regresa, se reenvían con el mismo nombre de campo, salvo lo que cambia la acción). Si el estado ya no lo permite, no se manda nada y se avisa por qué.
+- Cancelar pedido (CU-07): solo en Creado o Surtido; un pedido En reparto no se cancela (si la entrega falla, regresa a Surtido). Pide el motivo (El cliente desistió, Producto no disponible, Datos incorrectos, Entrega no realizada u Otro; con Otro, también la descripción, máximo 250) y confirma; avisa si almacén ya surtió. Manda el mismo pedido con Estatus 5 y el motivo en `Motivo` (pendiente de confirmar con el backend), que queda en la bitácora y sale en Reportes. El pedido no se borra: queda Cancelado, con su propia píldora en los filtros y un aviso en el detalle en lugar de la barra de avance.
+- Registrar pago: en En reparto, o en Surtido solo si es de recolección (un pedido a domicilio sale antes a reparto, Tabla 1), igual que "Registrar entrega" de la app móvil. La ventana muestra el total a cobrar y pide cuánto se recibió en Efectivo (empieza con el total); lo que falte se pasa solo a Tarjeta o transferencia. Debajo dice si cuadra ("Cuadra con el total · Pago: Efectivo") o cuánto falta o sobra; si no cuadra, no deja registrar. Con los dos montos es pago mixto: avisa que se podrá guardar cuando la API tenga la tabla `PagoPedidosApp` y no deja registrar. Se puede adjuntar el comprobante de entrega (foto del recibo firmado; elegir o arrastrar una imagen de hasta 5 MB), por ahora opcional y sin enviarse porque la API todavía no recibe fotos. También se pueden editar las observaciones (máximo 250), p. ej. para anotar una entrega parcial. Manda el mismo pedido con Estatus 4, `MetodoPago` 1 (efectivo) o 2 (tarjeta o transferencia), `FechaEntrega` de hoy (`aaaammdd`) y, solo si se cambiaron, las observaciones (conservando la modalidad al inicio). Al terminar: "Pago registrado. El pedido #id quedó Entregado." y se recarga el pedido. En la lista y el detalle el 2 se sigue viendo como "Crédito o transferencia", porque el sistema interno lo usa también para crédito.
 - Errores de cancelar y registrar pago: sin conexión, se avisa y la ventana sigue abierta; con 400 o 409 (p. ej. el pedido ya cambió de estado), se cierra, se muestra el mensaje y se recarga el pedido; con otro error, se avisa que no fue posible.
 - Surtido no se cambia en la web: almacén lo marca en el sistema interno. El pago se puede registrar en la web o en el sistema interno; ahí, al cobrar, el pedido pasa a Entregado con su método de pago y su fecha de entrega. La lista y el detalle se actualizan solos cada minuto, y al regresar a la pestaña, para reflejarlo (en el detalle, no mientras está abierta la ventana de cancelar o de pago). Ambos muestran el método de pago (Pendiente mientras no se cobra).
-- Todavía no hay historial de cambios, porque la API no lo guarda.
+- El detalle muestra el historial del pedido: los eventos que regresa la API de su bitácora.
 - Si la API responde 401, se cierra la sesión y se pasa a inicio de sesión con "Su sesión expiró. Inicie sesión nuevamente."
 
 ```mermaid
@@ -176,6 +177,25 @@ flowchart TD
     E -- Salir con cambios --> O{"¿Descartar los cambios?"}
     O -- Seguir editando --> E
     O -- Descartar cambios --> P[Ruta elegida]
+```
+
+### 7. Reparto (módulo de reparto)
+
+- `RepartoVista.vue` (CU-10, RF-REP-01 y RF-REP-02) es para el perfil `repartidor`, que solo ve esta pantalla (el enrutador lo regresa aquí si intenta otra). Funciona también en el navegador del teléfono. Se actualiza sola cada minuto.
+- **Listos para reparto**: pedidos Surtidos a domicilio, del más antiguo al más reciente, con folio, cliente, sucursal, dirección con "Ver en Maps", teléfono, productos y observaciones; sin importes. Se eligen uno o varios e "Iniciar reparto" los pasa a En reparto (Estatus 3). Antes vuelve a consultar cada uno: si alguno ya no está Surtido, no pasa ninguno y avisa "El pedido #id ya fue tomado por otro repartidor." Quién lo tomó queda en la bitácora.
+- **En reparto**: los que tomó el repartidor de la sesión (según la bitácora). "Registrar entrega" abre la misma ventana de cobro que "Registrar pago" y pregunta "¿Confirma que el pedido #id fue entregado?"; el pedido queda Entregado con su método de pago y la fecha de hoy. "No se entregó" pide el motivo (Cliente ausente, Dirección incorrecta, Cliente rechazó el pedido u Otro) y observaciones opcionales, y regresa el pedido a Surtido (Estatus 2) con el motivo; Reportes lo cuenta como entrega no realizada.
+- Sin conexión: "El cambio no se guardó por falta de conexión. Intente nuevamente."
+
+```mermaid
+flowchart TD
+    A[Reparto] --> B[GET /api/pedidos?incluirEventos=1]
+    B -- Error --> C[No fue posible cargar los pedidos · Reintentar] --> B
+    B -- Éxito --> D[Listos para reparto + En reparto]
+    D -- Elegir y Iniciar reparto --> E[GET de cada uno]
+    E -- "Alguno ya no está Surtido" --> F[El pedido #id ya fue tomado por otro repartidor] --> B
+    E -- Todos Surtidos --> G[PUT con Estatus 3] --> B
+    D -- Registrar entrega --> H[Cobro + ¿Confirma que el pedido #id fue entregado?] --> I[PUT con Estatus 4, MetodoPago y FechaEntrega] --> B
+    D -- No se entregó --> J[Motivo obligatorio] --> K[PUT con Estatus 2 y Motivo] --> B
 ```
 
 ## Relación con los módulos
