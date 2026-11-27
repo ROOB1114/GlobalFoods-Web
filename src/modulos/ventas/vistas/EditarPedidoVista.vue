@@ -30,6 +30,7 @@
     usarEditarPedido,
   } from '@/modulos/ventas/controladores/usarEditarPedido'
   import { MENSAJES } from '@/modulos/ventas/controladores/usarFormularioPedido'
+  import { MENSAJE_SIN_PERMISO, perfilPuedeEditar } from '@/modulos/ventas/controladores/permisosPedidos'
   import { descartarClientesEnMemoria } from '@/modulos/ventas/servicios/servicioClientesVentas'
   import { ErrorPedidos } from '@/modulos/ventas/servicios/servicioPedidos'
 
@@ -59,7 +60,13 @@
   // Ya se guardó o se confirmó el descarte: la salida que sigue no vuelve a preguntar.
   let salidaConfirmada = false
 
-  onMounted(pedido.cargar)
+  // Solo los perfiles de permisosPedidos.ts editan; el botón ya se oculta en el detalle, pero la
+  // dirección /pedidos/:id/editar también se puede escribir a mano (RF-ACC-03).
+  const puedeEditar = perfilPuedeEditar()
+
+  onMounted(() => {
+    if (puedeEditar) pedido.cargar()
+  })
 
   // La lista de clientes se guarda en memoria solo mientras esta pantalla está abierta.
   onUnmounted(descartarClientesEnMemoria)
@@ -176,7 +183,12 @@
           <h1 id="editar-pedido-titulo" class="editar-pedido__titulo">Editar pedido {{ folio }}</h1>
         </div>
 
-        <p v-if="pedido.cargando" class="editar-pedido__mensaje" role="status">{{ MENSAJES_DETALLE.cargando }}</p>
+        <div v-if="!puedeEditar" class="editar-pedido__mensaje">
+          <p class="editar-pedido__error" role="alert">{{ MENSAJE_SIN_PERMISO }}</p>
+          <RouterLink :to="rutaDetalle" class="editar-pedido__enlace">Volver al pedido {{ folio }}</RouterLink>
+        </div>
+
+        <p v-else-if="pedido.cargando" class="editar-pedido__mensaje" role="status">{{ MENSAJES_DETALLE.cargando }}</p>
 
         <div v-else-if="pedido.noEncontrado" class="editar-pedido__mensaje">
           <p>{{ mensajeNoEncontrado(id) }}</p>
@@ -184,7 +196,7 @@
         </div>
         
         <div v-else-if="pedido.errorCarga" class="editar-pedido__mensaje">
-          <p class="editar-pedido__error" role="alert">{{ MENSAJES_DETALLE.errorCarga }}</p>
+          <p class="editar-pedido__error" role="alert">{{ MENSAJES_EDICION.errorCarga }}</p>
           <div class="editar-pedido__reintentar">
             <BotonVue variante="secundario" compacto @click="pedido.cargar">Reintentar</BotonVue>
           </div>

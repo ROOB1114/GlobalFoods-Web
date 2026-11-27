@@ -165,7 +165,6 @@ const cancelado = computed(() => consulta.pedido?.estado.estatus === ESTATUS.can
 const advertenciaCancelar = computed(() => {
   const estatus = consulta.pedido?.estado.estatus
   if (estatus === ESTATUS.surtido) return 'Almacén ya surtió este pedido.'
-  if (estatus === ESTATUS.enReparto) return 'Este pedido ya salió a reparto. Avise al repartidor.'
   return ''
 })
 
@@ -182,7 +181,9 @@ const MENSAJES_PAGO = {
 
 const puedeRegistrarPago = computed(
   () =>
-    !!consulta.pedido && sePuedeRegistrarPago(consulta.pedido.estado.estatus) && perfilPuedeRegistrarPago(),
+    !!consulta.pedido &&
+    sePuedeRegistrarPago(consulta.pedido.estado.estatus, consulta.pedido.modalidad) &&
+    perfilPuedeRegistrarPago(),
 )
 
 const mostrarPago = ref(false)
@@ -216,10 +217,10 @@ async function alFallarCambio(
   avisar(mensajes.error, 'error')
 }
 
-async function alConfirmarCancelacion() {
+async function alConfirmarCancelacion(motivo: string) {
   cancelando.value = true
   try {
-    await cancelarPedido(id)
+    await cancelarPedido(id, motivo)
     mostrarCancelar.value = false
     avisar(MENSAJES_CANCELAR.exito(folio), 'exito')
     await consulta.cargar({ silencioso: true })
@@ -805,4 +806,4 @@ async function alConfirmarPago(pago: PagoEntrega, notas: string | null, comproba
     padding: 16px;
   }
 }
-</style>
+</style>

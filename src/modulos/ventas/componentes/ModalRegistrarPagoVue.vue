@@ -9,6 +9,11 @@ export interface Props {
   notas?: string
   /** Mientras se envía, los botones se deshabilitan y el diálogo no se cierra. */
   enviando?: boolean
+  /**
+   * 'pago': el administrador registra el pago (detalle del pedido). 'entrega': el repartidor
+   * registra la entrega con su cobro (CU-10 pasos 7–10); pide confirmar que se entregó.
+   */
+  modo?: 'pago' | 'entrega'
 }
 </script>
 
@@ -49,7 +54,10 @@ import { MAXIMO_OBSERVACIONES } from '@/modulos/ventas/controladores/usarFormula
 const props = withDefaults(defineProps<Props>(), {
   notas: '',
   enviando: false,
+  modo: 'pago',
 })
+
+const esEntrega = computed(() => props.modo === 'entrega')
 
 const emit = defineEmits<{
   (e: 'cerrar'): void
@@ -180,7 +188,7 @@ async function registrar() {
 <template>
   <ModalVue
     :mostrar="mostrar"
-    :titulo="`Registrar pago del pedido ${folio}`"
+    :titulo="esEntrega ? `Registrar entrega del pedido ${folio}` : `Registrar pago del pedido ${folio}`"
     :ancho-maximo="520"
     :cerrable="!enviando"
     @cerrar="emit('cerrar')"
@@ -349,12 +357,14 @@ async function registrar() {
         <IconoVue nombre="calendario" :tamano="18" />
         {{ AVISO }}
       </p>
+
+      <p v-if="esEntrega" class="pago__pregunta">¿Confirma que el pedido {{ folio }} fue entregado?</p>
     </div>
 
     <template #pie>
       <BotonVue variante="secundario" :deshabilitado="enviando" @click="emit('cerrar')">Cancelar</BotonVue>
       <BotonVue variante="exito" :deshabilitado="enviando || mixtoPendiente" @click="registrar">
-        {{ enviando ? 'Registrando…' : 'Registrar pago' }}
+        {{ enviando ? 'Registrando…' : esEntrega ? 'Confirmar entrega' : 'Registrar pago' }}
       </BotonVue>
     </template>
   </ModalVue>
@@ -677,6 +687,13 @@ async function registrar() {
 .notas__contador--limite {
   color: var(--gf-preparacion-fg);
   font-weight: 700;
+}
+
+.pago__pregunta {
+  margin: 0;
+  color: var(--gf-texto);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .pago__aviso {

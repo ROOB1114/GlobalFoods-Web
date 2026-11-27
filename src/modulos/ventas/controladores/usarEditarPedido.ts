@@ -11,6 +11,7 @@ import { ErrorPedidos, actualizarPedido, obtenerPedidoPorId } from '@/modulos/ve
 
 export const MENSAJES_EDICION = {
   noEditable: (estado: string) => `El pedido ya no puede modificarse porque se encuentra ${estado}.`,
+  errorCarga: 'No fue posible consultar el pedido. Intente nuevamente.',
   errorGuardar: 'No fue posible guardar los cambios. Intente nuevamente.',
   exito: 'Pedido actualizado correctamente.',
 }

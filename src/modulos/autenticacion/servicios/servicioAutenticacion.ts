@@ -79,6 +79,11 @@ export function esRolReportes(): boolean {
   return rol === 'reporte' || rol === 'reportes'
 }
 
+/** Repartidor (CU-10): solo ve la pantalla de Reparto. */
+export function esRolRepartidor(): boolean {
+  return obtenerRolUsuario() === 'repartidor'
+}
+
 export function obtenerIdUsuarioSesion(): number | null {
   const token = obtenerToken()
   if (!token) return null
@@ -106,6 +111,10 @@ export function obtenerMenuNavegacion(): ItemNavegacion[] {
     { etiqueta: 'Usuarios', icono: 'usuario', ruta: '/usuarios' }
   ]
 
+  if (rol === 'repartidor') {
+    return [{ etiqueta: 'Reparto', icono: 'camion', ruta: '/reparto' }]
+  }
+
   if (rol === 'cliente') {
     return menuCompleto.filter(item => ['Inicio', 'Pedidos'].includes(item.etiqueta))
   }
@@ -130,4 +139,4 @@ export function cerrarSesion(): void {
 
 export function haySesion(): boolean {
   return !!obtenerToken()
-}
+}

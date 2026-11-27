@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import InicioSesionVista from '@/modulos/autenticacion/vistas/InicioSesionVista.vue'
 import PanelVue from '@/modulos/principal/vistas/PanelVue.vue'
 import UsuariosVista from '@/modulos/administracion/vistas/UsuariosVista.vue'
-import { esRolReportes, haySesion, obtenerIdUsuarioSesion,
+import { esRolRepartidor, esRolReportes, haySesion, obtenerIdUsuarioSesion,
   obtenerRolUsuario, } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import ClientesVista from '@/modulos/administracion/vistas/ClientesVista.vue'
 import DetalleClienteVista from '@/modulos/administracion/vistas/DetalleClienteVista.vue'
@@ -13,6 +13,7 @@ import DetallePedidoVista from '@/modulos/ventas/vistas/DetallePedidoVista.vue'
 import EditarPedidoVista from '@/modulos/ventas/vistas/EditarPedidoVista.vue'
 import ReportesVista from '@/modulos/administracion/vistas/ReportesVista.vue'
 import InventarioVista from '@/modulos/almacen/vistas/InventarioVista.vue'
+import RepartoVista from '@/modulos/reparto/vistas/RepartoVista.vue'
 
 const enrutador = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -87,6 +88,12 @@ const enrutador = createRouter({
       component: InventarioVista,
       meta: { requiereAutenticacion: true },
     },
+    {
+      path: '/reparto',
+      name: 'reparto',
+      component: RepartoVista,
+      meta: { requiereAutenticacion: true },
+    },
   ],
 })
 
@@ -98,7 +105,13 @@ enrutador.beforeEach((destino) => {
   }
 
   if (destino.path === '/inicio-sesion' && haySesion()) {
-    return esRolReportes() ? '/reportes' : '/panel'
+    if (esRolReportes()) return '/reportes'
+    return esRolRepartidor() ? '/reparto' : '/panel'
+  }
+
+  // El repartidor solo trabaja en Reparto (CU-10); no ve importes ni el resto del sistema (RF-REP-01).
+  if (haySesion() && esRolRepartidor() && destino.name !== 'reparto') {
+    return '/reparto'
   }
 
   if (haySesion() && esRolReportes() && destino.name !== 'reportes' && destino.name !== 'detalle-pedido') {

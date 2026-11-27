@@ -5,7 +5,8 @@ import BotonVue from '@/componentes/BotonVue.vue'
 import CampoTextoVue from '@/componentes/CampoTextoVue.vue'
 import type { UsuarioAPI } from '@/modulos/administracion/servicios/servicioUsuarios'
 
-type TipoUsuario = 'Administrador' | 'Empleado' | 'Reporte'
+// Repartidor: opera el reparto (CU-10). TODO: confirmar con César que la API acepta este TipoUsuario.
+type TipoUsuario = 'Administrador' | 'Empleado' | 'Repartidor' | 'Reporte'
 
 interface Props {
   mostrar: boolean
@@ -36,7 +37,7 @@ watch(
       contrasena.value = nuevoUsuario.Contrasena || ''
 
       const tipo = nuevoUsuario.TipoUsuario || 'Administrador'
-      if (tipo === 'Administrador' || tipo === 'Empleado' || tipo === 'Reporte') {
+      if (tipo === 'Administrador' || tipo === 'Empleado' || tipo === 'Repartidor' || tipo === 'Reporte') {
         tipoSeleccionado.value = tipo
       } else {
         tipoSeleccionado.value = 'Administrador'
@@ -92,6 +93,14 @@ const handleGuardar = () => {
               @click="tipoSeleccionado = 'Empleado'"
             >
               Empleado
+            </button>
+            <button
+              type="button"
+              class="modal__tab"
+              :class="{ 'modal__tab--activo': tipoSeleccionado === 'Repartidor' }"
+              @click="tipoSeleccionado = 'Repartidor'"
+            >
+              Repartidor
             </button>
             <button
               type="button"
@@ -273,4 +282,4 @@ const handleGuardar = () => {
 .modal__boton-wrap {
   margin-top: 8px;
 }
-</style>
+</style>

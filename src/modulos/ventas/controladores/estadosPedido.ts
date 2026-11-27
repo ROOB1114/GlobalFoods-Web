@@ -1,4 +1,5 @@
 import type { EstadoPedido } from '@/componentes/ChipEstadoVue.vue'
+import type { ModalidadEntrega } from '@/modulos/ventas/interfaces/pedido'
 
 // Traducción del Estatus de la API a lo que se ve en pantalla. Si cambian los nombres o se
 // agregan estados, se ajusta solo aquí.
@@ -47,11 +48,11 @@ export const ESTADO_CANCELADO: EstadoPantalla = {
 export const ESTADOS_FILTRO: EstadoPantalla[] = [...ESTADOS_PEDIDO, ESTADO_CANCELADO]
 
 /**
- * Estatus en los que un pedido se puede cancelar: mientras no se haya entregado (ni cancelado
- * ya). Es la misma regla que la app móvil, por decisión del equipo; el documento (RF-PED-03)
- * solo permitía Creado y Surtido.
+ * Estatus en los que un pedido se puede cancelar: Creado o Surtido (CU-07, RN-09 y Tabla 1 del
+ * documento). Un pedido En reparto no se cancela: si la entrega falla, el repartidor lo regresa a
+ * Surtido (CU-10 A3) y ahí ya se puede cancelar.
  */
-const ESTATUS_CANCELABLES: number[] = [ESTATUS.creado, ESTATUS.surtido, ESTATUS.enReparto]
+const ESTATUS_CANCELABLES: number[] = [ESTATUS.creado, ESTATUS.surtido]
 
 export function sePuedeCancelar(estatus: number): boolean {
   return ESTATUS_CANCELABLES.includes(estatus)
@@ -64,11 +65,25 @@ export function sePuedeEditar(estatus: number): boolean {
   return ESTATUS_EDITABLES.includes(estatus)
 }
 
-/** El pago se registra cuando almacén ya surtió el pedido; al registrarlo, queda Entregado. */
-const ESTATUS_PARA_PAGO: number[] = [ESTATUS.surtido, ESTATUS.enReparto]
+/**
+ * El pago se registra al entregar; al registrarlo, el pedido queda Entregado. Según la Tabla 1 del
+ * documento, de Surtido solo pasa directo a Entregado un pedido de recolección (lo recoge el
+ * cliente en la congeladora); uno a domicilio tiene que salir antes a reparto. `modalidad` null
+ * (pedidos viejos que no la dicen) cuenta como a domicilio.
+ */
+export function sePuedeRegistrarPago(estatus: number, modalidad: ModalidadEntrega | null): boolean {
+  if (estatus === ESTATUS.enReparto) return true
+  return estatus === ESTATUS.surtido && modalidad === 'recoleccion'
+}
 
-export function sePuedeRegistrarPago(estatus: number): boolean {
-  return ESTATUS_PARA_PAGO.includes(estatus)
+/** El repartidor solo toma pedidos Surtidos a domicilio (CU-10 paso 2, RN-08). */
+export function sePuedeIniciarReparto(estatus: number, modalidad: ModalidadEntrega | null): boolean {
+  return estatus === ESTATUS.surtido && modalidad !== 'recoleccion'
+}
+
+/** La entrega (realizada o no) se registra sobre un pedido En reparto (CU-10 pasos 7–10 y A3). */
+export function sePuedeRegistrarResultadoEntrega(estatus: number): boolean {
+  return estatus === ESTATUS.enReparto
 }
 
 /** Estado de pantalla de un estatus. Uno desconocido se muestra como "Estado {n}" con el estilo de pendiente. */
