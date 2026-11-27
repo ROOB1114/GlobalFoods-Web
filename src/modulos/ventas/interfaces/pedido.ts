@@ -152,4 +152,5 @@ export interface EventoPedido {
   valorNuevo: string | null
   motivo: string | null
   origen: string
+  idUsuario: number | null
 }
