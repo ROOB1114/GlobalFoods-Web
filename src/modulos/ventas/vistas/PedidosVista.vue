@@ -14,51 +14,87 @@ import ChipEstadoVue from '@/componentes/ChipEstadoVue.vue'
 import IconoVue from '@/componentes/IconoVue.vue'
 import LayoutPanelVue from '@/componentes/LayoutPanelVue.vue'
 import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
-import { obtenerMenuNavegacion, obtenerNombreUsuario } from '@/modulos/autenticacion/servicios/servicioAutenticacion'
+
+import {
+  obtenerMenuNavegacion,
+  obtenerNombreUsuario,
+  obtenerRolUsuario,
+} from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import FiltrosPedidosVue from '@/modulos/ventas/componentes/FiltrosPedidosVue.vue'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
 import { salirPorSesionVencida } from '@/modulos/ventas/controladores/sesionVencida'
 import { usarActualizacionPeriodica } from '@/modulos/ventas/controladores/usarActualizacionPeriodica'
 import { IDS_LISTA, MENSAJES_LISTA, usarListaPedidos } from '@/modulos/ventas/controladores/usarListaPedidos'
 
-const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
-const itemsNavegacion = obtenerMenuNavegacion()
-
-const enrutador = useRouter()
-const lista = reactive(usarListaPedidos({ alVencerSesion: () => salirPorSesionVencida(enrutador) }))
-
-const columnas: ColumnaTabla[] = [
-  { clave: 'folio', etiqueta: 'Folio' },
-  { clave: 'cliente', etiqueta: 'Cliente y sucursal' },
-  { clave: 'registrado', etiqueta: 'Registrado' },
-  { clave: 'entrega', etiqueta: 'Entrega' },
-  { clave: 'modalidad', etiqueta: 'Modalidad' },
-  { clave: 'estado', etiqueta: 'Estado' },
-  { clave: 'metodoPago', etiqueta: 'Método de pago' },
-  { clave: 'total', etiqueta: 'Total', alineacion: 'derecha' },
-]
-
+// -----------------------------------------------------------------------------
+// Constantes y configuración de sesión
+// -----------------------------------------------------------------------------
 const SIN_DATO = '—'
 
-onMounted(lista.cargar)
-usarActualizacionPeriodica(() => lista.cargar({ silencioso: true }))
+const enrutador = useRouter()
+const nombreUsuario = obtenerNombreUsuario() || 'Usuario'
+const itemsNavegacion = obtenerMenuNavegacion()
+const esCliente = obtenerRolUsuario() === 'cliente'
+
+const TEXTOS_VISTA = esCliente
+  ? {
+      titulo: 'Mis pedidos',
+      subtitulo: 'Consulta el estado actual y el historial de tus pedidos.',
+      errorCarga: MENSAJES_LISTA.errorCargaCliente,
+      sinPedidos: MENSAJES_LISTA.sinPedidosCliente,
+    }
+  : {
+      titulo: 'Pedidos',
+      subtitulo: 'Consulta todos los pedidos y revisa en qué estado va cada uno.',
+      errorCarga: MENSAJES_LISTA.errorCarga,
+      sinPedidos: MENSAJES_LISTA.sinPedidos,
+    }
+
+const COLUMNAS: ColumnaTabla[] = esCliente
+  ? [
+      { clave: 'folio', etiqueta: 'Folio' },
+      { clave: 'sucursal', etiqueta: 'Sucursal / Entrega' },
+      { clave: 'registrado', etiqueta: 'Registrado' },
+      { clave: 'entrega', etiqueta: 'Entrega' },
+      { clave: 'modalidad', etiqueta: 'Modalidad' },
+      { clave: 'estado', etiqueta: 'Estado' },
+      { clave: 'metodoPago', etiqueta: 'Forma de pago' },
+      { clave: 'total', etiqueta: 'Importe', alineacion: 'derecha' },
+    ]
+  : [
+      { clave: 'folio', etiqueta: 'Folio' },
+      { clave: 'cliente', etiqueta: 'Cliente y sucursal' },
+      { clave: 'registrado', etiqueta: 'Registrado' },
+      { clave: 'entrega', etiqueta: 'Entrega' },
+      { clave: 'modalidad', etiqueta: 'Modalidad' },
+      { clave: 'estado', etiqueta: 'Estado' },
+      { clave: 'metodoPago', etiqueta: 'Método de pago' },
+      { clave: 'total', etiqueta: 'Total', alineacion: 'derecha' },
+    ]
+
+// -----------------------------------------------------------------------------
+// Estado y datos reactivos
+// -----------------------------------------------------------------------------
+const lista = reactive(
+  usarListaPedidos({
+    esCliente,
+    alVencerSesion: () => salirPorSesionVencida(enrutador),
+  }),
+)
 
 const horaActualizacion = computed(() =>
   lista.actualizadoA ? lista.actualizadoA.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '',
 )
 
-// "Limpiar filtros" se deshabilita al limpiar; el foco pasa a la búsqueda.
+// -----------------------------------------------------------------------------
+// Acciones de navegación y controles
+// -----------------------------------------------------------------------------
 async function alLimpiar() {
   lista.limpiarFiltros()
   await nextTick()
   document.getElementById(IDS_LISTA.buscar)?.focus()
 }
 
-/**
- * Clic en una fila de pedido: abre su detalle (Ctrl/Cmd + clic, en otra pestaña). No hace nada si
- * el clic fue en un enlace o botón de la fila (ya navegan solos; p. ej. el folio) ni si se está
- * seleccionando texto.
- */
 function alClicFila(evento: MouseEvent, id: number) {
   if (evento.target instanceof Element && evento.target.closest('a, button')) return
   if (window.getSelection()?.toString()) return
@@ -71,7 +107,6 @@ function alClicFila(evento: MouseEvent, id: number) {
   enrutador.push(destino)
 }
 
-// Al llegar a la primera o la última página el botón se deshabilita; el foco pasa al otro.
 async function alCambiarPagina(paso: 1 | -1) {
   lista.cambiarPagina(paso)
   await nextTick()
@@ -83,6 +118,11 @@ async function alCambiarPagina(paso: 1 | -1) {
 
 // CU-05: "Nuevo pedido" solo para los perfiles que registran pedidos (Tabla 2).
 const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
+// -----------------------------------------------------------------------------
+// Ciclo de vida
+// -----------------------------------------------------------------------------
+onMounted(lista.cargar)
+usarActualizacionPeriodica(() => lista.cargar({ silencioso: true }))
 </script>
 
 <template>
@@ -95,8 +135,8 @@ const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
     <div class="pedidos">
       <div class="pedidos__encabezado">
         <div>
-          <h1 class="pedidos__titulo">Pedidos</h1>
-          <p class="pedidos__subtitulo">Consulta todos los pedidos y revisa en qué estado va cada uno.</p>
+          <h1 class="pedidos__titulo">{{ TEXTOS_VISTA.titulo }}</h1>
+          <p class="pedidos__subtitulo">{{ TEXTOS_VISTA.subtitulo }}</p>
           <p v-if="horaActualizacion" class="pedidos__actualizado">
             Actualizado a las {{ horaActualizacion }} · se actualiza cada minuto
           </p>
@@ -118,21 +158,22 @@ const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
         v-model:hasta="lista.hasta"
         :conteos="lista.conteos"
         :clientes="lista.clientesConPedidos"
+        :solo-cliente="esCliente"
         :error-fechas="lista.errorFechas"
         :hay-filtros="lista.hayFiltros"
         @limpiar="alLimpiar"
       />
 
-      <TablaVue :columnas="columnas">
+      <TablaVue :columnas="COLUMNAS">
         <tr v-if="lista.cargando">
-          <td :colspan="columnas.length" class="pedidos__mensaje">
+          <td :colspan="COLUMNAS.length" class="pedidos__mensaje">
             <p role="status">{{ MENSAJES_LISTA.cargando }}</p>
           </td>
         </tr>
 
         <tr v-else-if="lista.errorCarga">
-          <td :colspan="columnas.length" class="pedidos__mensaje">
-            <p class="pedidos__error" role="alert">{{ MENSAJES_LISTA.errorCarga }}</p>
+          <td :colspan="COLUMNAS.length" class="pedidos__mensaje">
+            <p class="pedidos__error" role="alert">{{ TEXTOS_VISTA.errorCarga }}</p>
             <div class="pedidos__reintentar">
               <BotonVue variante="secundario" compacto @click="lista.cargar">Reintentar</BotonVue>
             </div>
@@ -140,11 +181,11 @@ const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
         </tr>
 
         <tr v-else-if="!lista.hayPedidos">
-          <td :colspan="columnas.length" class="pedidos__mensaje">{{ MENSAJES_LISTA.sinPedidos }}</td>
+          <td :colspan="COLUMNAS.length" class="pedidos__mensaje">{{ TEXTOS_VISTA.sinPedidos }}</td>
         </tr>
 
         <tr v-else-if="lista.totalFiltrados === 0">
-          <td :colspan="columnas.length" class="pedidos__mensaje">{{ MENSAJES_LISTA.sinResultados }}</td>
+          <td :colspan="COLUMNAS.length" class="pedidos__mensaje">{{ MENSAJES_LISTA.sinResultados }}</td>
         </tr>
 
         <template v-else>
@@ -160,8 +201,13 @@ const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
               </RouterLink>
             </td>
             <td>
-              <p class="pedidos__cliente">{{ fila.cliente }}</p>
-              <p class="pedidos__detalle">{{ fila.sucursal }}</p>
+              <template v-if="esCliente">
+                <p class="pedidos__cliente">{{ fila.sucursal }}</p>
+              </template>
+              <template v-else>
+                <p class="pedidos__cliente">{{ fila.cliente }}</p>
+                <p class="pedidos__detalle">{{ fila.sucursal }}</p>
+              </template>
             </td>
             <td>{{ formatearFecha(fila.registrado) || SIN_DATO }}</td>
             <td>{{ fila.fechaEntrega ? formatearFecha(fila.fechaEntrega) : SIN_DATO }}</td>
@@ -259,7 +305,6 @@ const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
   flex: none;
 }
 
-/* .pedidos delante para ganarle al padding y al nowrap de las celdas de TablaVue. */
 .pedidos .pedidos__mensaje {
   padding: 32px 16px;
   color: var(--gf-texto-tenue);
@@ -276,7 +321,6 @@ const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
   margin-top: 12px;
 }
 
-/* Toda la fila abre el detalle. El fondo va en las celdas, que son las que pinta TablaVue. */
 .pedidos__fila {
   cursor: pointer;
 }

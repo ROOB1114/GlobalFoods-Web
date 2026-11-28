@@ -1,12 +1,4 @@
 <script setup lang="ts">
-// Filtros de la lista de pedidos: estado (píldoras con su conteo), búsqueda por folio o cliente
-// y rango de la fecha de registro. Las píldoras son botones con aria-pressed; presionar otra vez
-// la activa regresa a Todos.
-// El buscador funciona como el de Nuevo pedido (combobox con lista): al hacer clic se despliegan
-// los clientes que tienen pedidos y al escribir la lista se va reduciendo. Elegir uno deja solo
-// sus pedidos; escribir de nuevo regresa a buscar por lo escrito (folio o nombre). No se abre
-// solo al recibir el foco, porque "Limpiar filtros" lo enfoca.
-
 import { computed, nextTick, ref, watch } from 'vue'
 
 import BotonVue from '@/componentes/BotonVue.vue'
@@ -20,10 +12,15 @@ import {
 } from '@/modulos/ventas/controladores/usarListaPedidos'
 import type { Cliente } from '@/modulos/ventas/interfaces/cliente'
 
+// -----------------------------------------------------------------------------
+// Props, eventos y modelos
+// -----------------------------------------------------------------------------
 interface Props {
   conteos: ConteosPedidos
-  /** Clientes que tienen pedidos: las opciones del buscador. */
+  /** Clientes que tienen pedidos: opciones del buscador (solo personal). */
   clientes?: ClienteConPedidos[]
+  /** Oculta el selector desplegable de clientes (CU-23 / RF-HIS-03). */
+  soloCliente?: boolean
   /** Error del rango de fechas; se pinta debajo de Desde. */
   errorFechas?: string
   /** Habilita "Limpiar filtros". */
@@ -32,6 +29,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   clientes: () => [],
+  soloCliente: false,
   errorFechas: '',
   hayFiltros: false,
 })
@@ -40,42 +38,54 @@ const emit = defineEmits<{
   (e: 'limpiar'): void
 }>()
 
-/** null = Todos. */
 const estatus = defineModel<number | null>('estatus', { required: true })
 const criterio = defineModel<string>('criterio', { required: true })
-/** Cliente elegido en la lista; null si se busca por lo escrito. */
 const idCliente = defineModel<number | null>('idCliente', { default: null })
 const desde = defineModel<string>('desde', { required: true })
 const hasta = defineModel<string>('hasta', { required: true })
 
-function alternar(valor: number) {
-  estatus.value = estatus.value === valor ? null : valor
-}
-
-// --- Buscador con lista de clientes ---
-
+// -----------------------------------------------------------------------------
+// Constantes y estado local del buscador de clientes
+// -----------------------------------------------------------------------------
 const ID_LISTA_CLIENTES = 'pedidos-buscar-clientes'
 const idOpcion = (indice: number) => `pedidos-buscar-cliente-${indice}`
 
 const abierta = ref(false)
-/** Opción resaltada con las flechas; -1 si ninguna. */
 const indiceActivo = ref(-1)
 
-const indiceClientes = computed(() =>
-  indexarClientes(props.clientes.map(({ id, nombre }) => ({ id, nombre, telefono: null }))),
+// -----------------------------------------------------------------------------
+// Propiedades computadas
+// -----------------------------------------------------------------------------
+const marcadorBusqueda = computed(() =>
+  props.soloCliente ? 'Folio o sucursal de entrega' : 'Folio o nombre del cliente',
 )
+
+const indiceClientes = computed(() =>
+  props.soloCliente
+    ? []
+    : indexarClientes(props.clientes.map(({ id, nombre }) => ({ id, nombre, telefono: null }))),
+)
+
 const pedidosPorCliente = computed(() => new Map(props.clientes.map(({ id, pedidos }) => [id, pedidos])))
 
-// Con un cliente ya elegido se muestran todos, para poder cambiarlo; al escribir se filtran.
-const opciones = computed(() => filtrarClientes(indiceClientes.value, idCliente.value === null ? criterio.value : ''))
-const listaAbierta = computed(() => abierta.value && opciones.value.length > 0)
+const opciones = computed(() =>
+  props.soloCliente ? [] : filtrarClientes(indiceClientes.value, idCliente.value === null ? criterio.value : ''),
+)
 
-/** La opción que elige Enter: la resaltada o, si solo queda una, esa. */
+const listaAbierta = computed(() => !props.soloCliente && abierta.value && opciones.value.length > 0)
+
 const opcionParaEnter = computed<Cliente | undefined>(() => {
   if (!listaAbierta.value) return undefined
   if (indiceActivo.value >= 0) return opciones.value[indiceActivo.value]
   return opciones.value.length === 1 ? opciones.value[0] : undefined
 })
+
+// -----------------------------------------------------------------------------
+// Acciones y eventos
+// -----------------------------------------------------------------------------
+function alternar(valor: number) {
+  estatus.value = estatus.value === valor ? null : valor
+}
 
 function textoPedidos(id: number): string {
   const total = pedidosPorCliente.value.get(id) ?? 0
@@ -83,6 +93,7 @@ function textoPedidos(id: number): string {
 }
 
 function abrirLista() {
+  if (props.soloCliente) return
   abierta.value = true
 }
 
@@ -91,8 +102,8 @@ function cerrarLista() {
   indiceActivo.value = -1
 }
 
-// Al escribir se deja de filtrar por el cliente elegido y se busca por lo escrito.
 function alEscribir() {
+  if (props.soloCliente) return
   idCliente.value = null
   abierta.value = true
   indiceActivo.value = -1
@@ -105,6 +116,7 @@ function elegir(opcion: Cliente) {
 }
 
 function moverActivo(paso: 1 | -1) {
+  if (props.soloCliente) return
   abierta.value = true
   const total = opciones.value.length
   if (total === 0) return
@@ -115,12 +127,8 @@ function moverActivo(paso: 1 | -1) {
   indiceActivo.value = (indiceActivo.value + paso + total) % total
 }
 
-// La opción activa siempre queda a la vista dentro de la lista.
-watch(indiceActivo, (indice) => {
-  if (indice >= 0) nextTick(() => document.getElementById(idOpcion(indice))?.scrollIntoView({ block: 'nearest' }))
-})
-
 function alPresionarTecla(evento: KeyboardEvent) {
+  if (props.soloCliente) return
   switch (evento.key) {
     case 'ArrowDown':
       evento.preventDefault()
@@ -146,6 +154,10 @@ function alPresionarTecla(evento: KeyboardEvent) {
       break
   }
 }
+
+watch(indiceActivo, (indice) => {
+  if (indice >= 0) nextTick(() => document.getElementById(idOpcion(indice))?.scrollIntoView({ block: 'nearest' }))
+})
 </script>
 
 <template>
@@ -175,15 +187,15 @@ function alPresionarTecla(evento: KeyboardEvent) {
           :id="IDS_LISTA.buscar"
           v-model="criterio"
           etiqueta="Buscar"
-          marcador="Folio o nombre del cliente"
+          :marcador="marcadorBusqueda"
           icono="lupa"
           compacto
           autocomplete="off"
-          role="combobox"
-          aria-autocomplete="list"
-          :aria-expanded="listaAbierta"
-          :aria-controls="ID_LISTA_CLIENTES"
-          :aria-activedescendant="indiceActivo >= 0 ? idOpcion(indiceActivo) : undefined"
+          :role="soloCliente ? undefined : 'combobox'"
+          :aria-autocomplete="soloCliente ? undefined : 'list'"
+          :aria-expanded="soloCliente ? undefined : listaAbierta"
+          :aria-controls="soloCliente ? undefined : ID_LISTA_CLIENTES"
+          :aria-activedescendant="!soloCliente && indiceActivo >= 0 ? idOpcion(indiceActivo) : undefined"
           @keydown="alPresionarTecla"
           @input="alEscribir"
           @click="abrirLista"
@@ -191,6 +203,7 @@ function alPresionarTecla(evento: KeyboardEvent) {
         />
 
         <ul
+          v-if="!soloCliente"
           v-show="listaAbierta"
           :id="ID_LISTA_CLIENTES"
           class="buscador__lista"
@@ -226,7 +239,14 @@ function alPresionarTecla(evento: KeyboardEvent) {
         :error="errorFechas"
       />
 
-      <CampoTextoVue :id="IDS_LISTA.hasta" v-model="hasta" etiqueta="Hasta" tipo="date" compacto :min="desde || undefined" />
+      <CampoTextoVue
+        :id="IDS_LISTA.hasta"
+        v-model="hasta"
+        etiqueta="Hasta"
+        tipo="date"
+        compacto
+        :min="desde || undefined"
+      />
 
       <div class="campos__accion">
         <!-- Ocupa el alto de una etiqueta para que el botón quede a la altura de los campos. -->

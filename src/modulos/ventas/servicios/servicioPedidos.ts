@@ -80,12 +80,11 @@ interface PedidoConsultadoAPI {
   Id: number
   IdCliente: number
   IdSucursal: number
-  /** Fecha de registro como entero aaaammdd. */
+  NombreSucursal?: string | null
   Fecha: number
   TotalKG: number
   Total: number
   Estatus: number
-  /** Puede no venir si la API todavía no lo regresa. */
   MetodoPago?: number | null
   FechaEntrega?: number | null
   fechaEntrega?: number | null
@@ -324,20 +323,19 @@ function aLinea(linea: LineaConsultadaAPI): LineaPedido {
   }
 }
 
-function aEvento(evento: EventoConsultadoAPI): EventoPedido {
-  return {
-    id: aNumero(evento.Id),
-    fechaHora: String(evento.FechaHora ?? ''),
-    usuario: String(evento.UsuarioNombre ?? 'Sistema'),
-    perfil: String(evento.Perfil ?? ''),
-    accion: String(evento.Accion ?? ''),
-    estadoAnterior: evento.EstadoAnterior == null ? null : aNumero(evento.EstadoAnterior),
-    estadoResultante: evento.EstadoResultante == null ? null : aNumero(evento.EstadoResultante),
-    valorAnterior: evento.ValorAnterior ?? null,
-    valorNuevo: evento.ValorNuevo ?? null,
-    motivo: evento.Motivo ?? null,
-    origen: String(evento.Origen ?? 'web'),
-  }
+interface EventoConsultadoAPI {
+  Id: number
+  FechaHora: string
+  IdUsuario?: number | null
+  UsuarioNombre: string
+  Perfil: string
+  Accion: string
+  EstadoAnterior: number | null
+  EstadoResultante: number | null
+  ValorAnterior: string | null
+  ValorNuevo: string | null
+  Motivo: string | null
+  Origen: string
 }
 
 function aPedido(pedido: PedidoConsultadoAPI): Pedido {
@@ -345,6 +343,7 @@ function aPedido(pedido: PedidoConsultadoAPI): Pedido {
     id: aNumero(pedido.Id),
     idCliente: aNumero(pedido.IdCliente),
     idSucursal: aNumero(pedido.IdSucursal),
+    nombreSucursal: pedido.NombreSucursal ? String(pedido.NombreSucursal).trim() : null,
     fechaRegistro: fechaIsoDeEntero(pedido.Fecha),
     fechaEntrega: fechaEntregaDe(pedido),
     totalKg: aNumero(pedido.TotalKG),
@@ -354,6 +353,23 @@ function aPedido(pedido: PedidoConsultadoAPI): Pedido {
     observaciones: pedido.Observaciones ?? '',
     lineas: (pedido.lineas ?? []).map(aLinea),
     eventos: (pedido.eventos ?? []).map(aEvento),
+  }
+}
+
+function aEvento(evento: EventoConsultadoAPI): EventoPedido {
+  return {
+    id: aNumero(evento.Id),
+    fechaHora: String(evento.FechaHora ?? ''),
+    idUsuario: evento.IdUsuario == null ? null : aNumero(evento.IdUsuario),
+    usuario: String(evento.UsuarioNombre ?? 'Sistema'),
+    perfil: String(evento.Perfil ?? ''),
+    accion: String(evento.Accion ?? ''),
+    estadoAnterior: evento.EstadoAnterior == null ? null : aNumero(evento.EstadoAnterior),
+    estadoResultante: evento.EstadoResultante == null ? null : aNumero(evento.EstadoResultante),
+    valorAnterior: evento.ValorAnterior ?? null,
+    valorNuevo: evento.ValorNuevo ?? null,
+    motivo: evento.Motivo ?? null,
+    origen: String(evento.Origen ?? 'web'),
   }
 }
 
@@ -569,4 +585,4 @@ export async function obtenerPedidos(
 
 export async function obtenerPedidoPorId(id: number): Promise<Pedido> {
   return aPedido(await consultarPedido(id))
-}
+}
