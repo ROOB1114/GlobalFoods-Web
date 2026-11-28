@@ -1,4 +1,11 @@
 <script setup lang="ts">
+// Pestaña Pedidos: todos los pedidos con filtros por estado, búsqueda, fechas y páginas de 10.
+// Un clic en cualquier parte de la fila abre su detalle; el folio es además un enlace, para
+// llegar con el teclado y abrirlo en otra pestaña. El estado y los filtros viven en usarListaPedidos().
+// La lista se actualiza sola cada minuto para reflejar lo que cambia el sistema interno
+// (Surtido, cobro y Entregado).
+
+import { perfilPuedeRegistrarPedido } from '@/modulos/ventas/controladores/permisosPedidos'
 import { computed, nextTick, onMounted, reactive } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
@@ -109,6 +116,8 @@ async function alCambiarPagina(paso: 1 | -1) {
   }
 }
 
+// CU-05: "Nuevo pedido" solo para los perfiles que registran pedidos (Tabla 2).
+const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
 // -----------------------------------------------------------------------------
 // Ciclo de vida
 // -----------------------------------------------------------------------------
@@ -133,7 +142,7 @@ usarActualizacionPeriodica(() => lista.cargar({ silencioso: true }))
           </p>
         </div>
 
-        <div class="pedidos__accion">
+        <div v-if="puedeRegistrarPedido" class="pedidos__accion">
           <BotonVue variante="exito" @click="enrutador.push({ name: 'nuevo-pedido', query: { desde: 'pedidos' } })">
             <IconoVue nombre="mas" :tamano="16" />
             Nuevo pedido

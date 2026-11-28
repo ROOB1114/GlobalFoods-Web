@@ -115,6 +115,13 @@ export function obtenerMenuNavegacion(): ItemNavegacion[] {
     return [{ etiqueta: 'Reparto', icono: 'camion', ruta: '/reparto' }]
   }
 
+  if (rol === 'administrador') {
+    // TODO (perfiles): Reparto va aquí solo para probarlo con la API real; según la Tabla 2 es del
+    // perfil repartidor (ver permisosPedidos.ts).
+    const [inicio, pedidos, ...resto] = menuCompleto
+    return [inicio!, pedidos!, { etiqueta: 'Reparto', icono: 'camion', ruta: '/reparto' }, ...resto]
+  }
+
   if (rol === 'cliente') {
     return menuCompleto.filter(item => ['Inicio', 'Pedidos'].includes(item.etiqueta))
   }

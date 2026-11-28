@@ -11,6 +11,7 @@ import TablaVue, { type ColumnaTabla } from '@/componentes/TablaVue.vue'
 import {obtenerCatalogoCliente, obtenerInventarioActual, type ArticuloInventario} from '@/modulos/almacen/servicios/servicioInventario'
 import {obtenerMenuNavegacion, obtenerNombreUsuario, obtenerRolUsuario} from '@/modulos/autenticacion/servicios/servicioAutenticacion'
 import { ESTATUS, estadoDePedido } from '@/modulos/ventas/controladores/estadosPedido'
+import { perfilPuedeRegistrarPedido } from '@/modulos/ventas/controladores/permisosPedidos'
 import { MODALIDADES, formatearFecha, formatearKg, formatearMoneda } from '@/modulos/ventas/controladores/formatosPedido'
 import { textoMetodoPago } from '@/modulos/ventas/controladores/metodosPago'
 import { leerObservaciones } from '@/modulos/ventas/controladores/observacionesPedido'
@@ -189,6 +190,9 @@ const inventarioFiltrado = computed(() => {
   )
 })
 
+
+// CU-05: "Nuevo pedido" solo para los perfiles que registran pedidos (Tabla 2).
+const puedeRegistrarPedido = perfilPuedeRegistrarPedido()
 </script>
 
 <template>
@@ -208,7 +212,7 @@ const inventarioFiltrado = computed(() => {
           </p>
         </div>
 
-        <div class="panel__accion">
+        <div v-if="puedeRegistrarPedido" class="panel__accion">
           <BotonVue variante="exito" @click="enrutador.push({ name: 'nuevo-pedido', query: { desde: 'inicio' } })">
             <IconoVue nombre="mas" :tamano="16" />
             Nuevo Pedido
@@ -537,4 +541,4 @@ const inventarioFiltrado = computed(() => {
   }
 }
 
-</style>
+</style>

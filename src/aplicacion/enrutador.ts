@@ -14,6 +14,7 @@ import EditarPedidoVista from '@/modulos/ventas/vistas/EditarPedidoVista.vue'
 import ReportesVista from '@/modulos/administracion/vistas/ReportesVista.vue'
 import InventarioVista from '@/modulos/almacen/vistas/InventarioVista.vue'
 import RepartoVista from '@/modulos/reparto/vistas/RepartoVista.vue'
+import { perfilPuedeRegistrarPedido } from '@/modulos/ventas/controladores/permisosPedidos'
 
 const enrutador = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -107,6 +108,11 @@ enrutador.beforeEach((destino) => {
   if (destino.path === '/inicio-sesion' && haySesion()) {
     if (esRolReportes()) return '/reportes'
     return esRolRepartidor() ? '/reparto' : '/panel'
+  }
+
+  // CU-05: solo la asesora y el cliente registran pedidos (Tabla 2); a los demás se les regresa a Pedidos.
+  if (haySesion() && destino.name === 'nuevo-pedido' && !perfilPuedeRegistrarPedido()) {
+    return '/pedidos'
   }
 
   // El repartidor solo trabaja en Reparto (CU-10); no ve importes ni el resto del sistema (RF-REP-01).
